@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>台灣手語學習遊戲 - Web 版</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #000;
+            color: #fff;
+            font-family: Arial, sans-serif;
+        }
+        /* 讓遊戲畫面填滿整個視窗 */
+        #canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+        /* 將 UI 顯示在螢幕上方中央 */
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            pointer-events: none;
+            font-size: 20px;
+            font-weight: 600;
+        }
+        #ui p {
+            margin: 0;
+            pointer-events: auto;
+        }
+        #ui select {
+            pointer-events: auto;
+        }
+        #video {
+            position: absolute;
+            right: 10px;
+            top: 10px;
+            width: 240px;
+            height: 180px;
+            border: 2px solid #0f0;
+            z-index: 1; /* 只作為 MediaPipe 輸入，不直接顯示 */
+            opacity: 0; /* 隱藏實際影片，由 canvas 負責畫出鏡像畫面 */
+        }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <select id="difficulty-select" style="font-size: 18px; padding: 4px; background: #333; color: #fff; border: 1px solid #777; border-radius: 4px; outline: none; cursor: pointer;">
+            <option value="all">所有難度</option>
+            <option value="1">等級 1 (簡單)</option>
+            <option value="2">等級 2 (中等)</option>
+            <option value="3">等級 3 (困難)</option>
+        </select>
+        <p id="status">狀態: 準備中</p>
+        <p id="score">分數: 0</p>
+        <p id="life">生命: 10</p>
+        <p id="gesture">偵測: 無</p>
+        <p id="progress">進度: 等待手勢...</p>
+    </div>
+    <div style="position: absolute; top: 10px; left: 10px; z-index: 10; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 8px; color: white;">
+        <label for="audioUpload" style="font-size: 16px; font-weight: bold; cursor: pointer;">
+            🎵 點此上傳你的音樂 (MP3)
+        </label>
+        <input type="file" id="audioUpload" accept="audio/*" style="display: block; margin-top: 5px;">
+        <audio id="bgmPlayer" style="display: none;"></audio> </div>
+    <canvas id="canvas" width="600" height="800"></canvas>
+    <video id="video" autoplay playsinline muted></video>
+
+    <!-- MediaPipe Hands JS (瀏覽器版) -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>
