@@ -14,23 +14,44 @@ audioUpload.addEventListener('change', async function(e) {
     const file = e.target.files[0];
     if (!file) return;
 
+    // 🛑 防線一：限制檔案大小 (15 MB)，防止記憶體撐爆
+    const maxSize = 15 * 1024 * 1024; 
+    if (file.size > maxSize) {
+        alert("這首歌太長或檔案太大囉！請上傳 15MB 以下的音樂檔。");
+        e.target.value = ''; // 清空上傳欄位
+        return; 
+    }
+
+    // 🛑 防線二：開始解析時，鎖死上傳按鈕，防止玩家狂點上傳產生多重宇宙
+    audioUpload.disabled = true;
+
     if (statusEl) statusEl.textContent = '狀態: 🎵 音樂解析中，請稍候...';
     isAnalyzing = true;
 
-    // 1. 建立隱藏的音樂播放源
-    const fileURL = URL.createObjectURL(file);
-    bgmPlayer.src = fileURL;
+    try {
+        // 1. 建立隱藏的音樂播放源
+        const fileURL = URL.createObjectURL(file);
+        bgmPlayer.src = fileURL;
 
-    // 2. 讀取檔案二進位資料給 Web Audio API 解析
-    const arrayBuffer = await file.arrayBuffer();
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+        // 2. 讀取檔案二進位資料給 Web Audio API 解析
+        const arrayBuffer = await file.arrayBuffer();
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
 
-    // 3. 執行你自創的「智慧分析演算法」
-    musicBeats = await analyzeBeatsSmartJS(audioBuffer);
-    
-    isAnalyzing = false;
-    if (statusEl) statusEl.textContent = '狀態: ✅ 解析完成！按 Enter 開始遊戲';
+        // 3. 執行你自創的「智慧分析演算法」
+        musicBeats = await analyzeBeatsSmartJS(audioBuffer);
+        
+        if (statusEl) statusEl.textContent = '狀態: ✅ 解析完成！按 Enter 開始遊戲';
+    } catch (error) {
+        // 🛑 捕捉音樂解析失敗的極端狀況
+        console.error("音樂解析失敗:", error);
+        alert("這首音樂無法解析，請換一首歌試試看！");
+        if (statusEl) statusEl.textContent = '狀態: 準備中 (請重新上傳)';
+    } finally {
+        isAnalyzing = false;
+        // 🛑 防線二：解析完成或失敗後，解鎖上傳按鈕
+        audioUpload.disabled = false;
+    }
 });
 
 // 你 Python 裡的 analyze_beats_smart 完整 JS 翻譯版
@@ -38,7 +59,6 @@ async function analyzeBeatsSmartJS(audioBuffer) {
     const duration = audioBuffer.duration;
     const sampleRate = audioBuffer.sampleRate;
     
-    // 使用離線運算，瞬間將音樂拆成 低、中、高 三個頻段 (模擬 librosa melspectrogram)
     const offlineCtx = new OfflineAudioContext(3, audioBuffer.length, sampleRate);
     const source = offlineCtx.createBufferSource();
     source.buffer = audioBuffer;
@@ -54,12 +74,11 @@ async function analyzeBeatsSmartJS(audioBuffer) {
     merger.connect(offlineCtx.destination);
     
     source.start(0);
-    const renderedBuffer = await offlineCtx.startRendering(); // C++ 引擎飆速運算
+    const renderedBuffer = await offlineCtx.startRendering(); 
 
-    // 取得能量包絡 (Onset Strength)
     function getOnsetEvents(channelData, lane, targetMin, targetMax) {
-        const windowSize = Math.floor(sampleRate * 0.05); // 50ms
-        const stepSize = Math.floor(sampleRate * 0.01);   // 10ms
+        const windowSize = Math.floor(sampleRate * 0.05); 
+        const stepSize = Math.floor(sampleRate * 0.01);   
         let energy = [];
         
         for (let i = 0; i < channelData.length - windowSize; i += stepSize) {
@@ -72,12 +91,10 @@ async function analyzeBeatsSmartJS(audioBuffer) {
         const minE = Math.min(...energy);
         const normEnergy = energy.map(e => (e - minE) / (maxE - minE + 1e-6));
 
-        // 動態尋找最佳門檻 (跟你的 Python 一模一樣的迴圈)
         let threshold = 0.35;
         let events = [];
         for (let attempt = 0; attempt < 6; attempt++) {
             events = [];
-            // 抓出波峰 (Peaks)
             for (let i = 1; i < normEnergy.length - 1; i++) {
                 if (normEnergy[i] > threshold && normEnergy[i] > normEnergy[i-1] && normEnergy[i] > normEnergy[i+1]) {
                     events.push({ time: i * (0.01), lane: lane });
@@ -99,7 +116,6 @@ async function analyzeBeatsSmartJS(audioBuffer) {
     let allEvents = [...eventsLow, ...eventsMid, ...eventsHigh];
     allEvents.sort((a, b) => a.time - b.time);
 
-    // --- 絕對強制冷卻系統 ---
     let filteredEvents = [];
     let lastBombTime = -999.0;
     for (let ev of allEvents) {
@@ -109,9 +125,8 @@ async function analyzeBeatsSmartJS(audioBuffer) {
         }
     }
 
-    // --- 保底補償機制 ---
     let finalEvents = [];
-    const fillInterval = 3.0; // 預設 1 秒補一顆 (JS 算 BPM 較耗時，直接用通用節拍)
+    const fillInterval = 3.0; 
     const MAX_EMPTY_GAP = 5.0;
 
     if (filteredEvents.length > 0) {
@@ -131,13 +146,13 @@ async function analyzeBeatsSmartJS(audioBuffer) {
     }
     
     console.log(`🎵 音樂分析完成！共產生 ${finalEvents.length} 顆炸彈。`);
-    // 預先計算總目標數給 UI
     TARGET_BOMBS = finalEvents.length; 
     return finalEvents;
 }
+
 // ==========================================
 // app.js: 台灣手語學習遊戲 Web 版
-// 1) Canvas 遊戲、2) MediaPipe Hands (執行手勢偵測雛形)
+// ==========================================
 
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
@@ -148,7 +163,6 @@ const video = document.getElementById('video');
 const gestureEl = document.getElementById('gesture');
 const progressEl = document.getElementById('progress');
 
-// 畫布尺寸與遊戲範圍自動適應視窗（行為參數仍比照 Python 版）
 let WIDTH = 600;
 let HEIGHT = 800;
 
@@ -158,86 +172,83 @@ function resizeCanvasToWindow() {
   WIDTH = canvas.width;
   HEIGHT = canvas.height;
 }
-
 window.addEventListener('resize', resizeCanvasToWindow);
 resizeCanvasToWindow();
 
-// -----------------------
-// 遊戲狀態對應 Python 版
-// -----------------------
 let score = 0;
 let bombs = [];
 let frameCounter = 0;
 
-// 房子相關（等同於 house_health）
 const HOUSE_COUNT = 10;
 const HOUSE_WIDTH = 120;
 const HOUSE_HEIGHT = 80;
 const HOUSE_MARGIN_BOTTOM = 20;
 let houses = [];
 
-// 飛機與炸彈統計
 let plane = null;
 let totalBombsDropped = 0;
-// 再降低場上同時炸彈數量，讓畫面更乾淨
 const MIN_ACTIVE_BOMBS = 2;
 let TARGET_BOMBS = 15;
-// 放慢補充炸彈的速度
-let minBombReplenishDelay = 150;
-let minBombReplenishCounter = 100;
 
 let gameOver = false;
 let win = false;
 let gameStarted = false;
 
-// -----------------------
-// 載入圖片資源（背景／房子／飛機／炸彈／爆炸）
-// -----------------------
+let isProcessingFrame = false; 
 
-let isProcessingFrame = false; // 防止送太多幀把主執行緒塞爆
-
-// ----- Web Worker for DTW (keeps main thread / canvas silky smooth) -----
-const dtwWorker = new Worker('dtw_worker.js');
+// 🛑 防線四：Web Worker 超時機制封裝
+let dtwWorker;
 let workerBusy = false;
+let dtwTimeout = null;
 
-dtwWorker.onmessage = function (e) {
-  const { type, words, match, score } = e.data;
+function initWorker() {
+  dtwWorker = new Worker('dtw_worker.js');
+  
+  dtwWorker.onmessage = function (e) {
+    // 🛑 收到 Worker 訊息，安全拆除超時炸彈！
+    clearTimeout(dtwTimeout);
 
-  if (type === 'GESTURES_LOADED') {
-    console.log('DTW Worker ready. Loaded words.');
-    fullVocabulary = e.data.vocab || [];
-    gesturesLoaded = true;
-    updateDifficultySelection();
-    return;
-  }
+    const { type, words, match, score } = e.data;
 
-  // Worker finished a MATCH request
-  workerBusy = false;
-
-  // 無論有沒有配對，先更新得分顯示幫助調 debug 門檻
-  if (gestureEl) {
-    if (match) {
-      gestureEl.textContent = `偵測: ${match} (得分: ${score.toFixed(1)})`;
-    } else {
-      gestureEl.textContent = `偵測: 最佳分數 ${score === Infinity ? '--' : score.toFixed(1)}`;
+    if (type === 'GESTURES_LOADED') {
+      console.log('DTW Worker ready. Loaded words.');
+      fullVocabulary = e.data.vocab || [];
+      gesturesLoaded = true;
+      updateDifficultySelection();
+      return;
     }
-  }
 
-  if (type === 'RESULT' && match && gameStarted && !gameOver) {
-    for (let b of bombs) {
-      if (b.word === match && !b.shrinking && !b.exploding) {
-        b.startShrink(false);
-        dtwCooldown = 25;
-        liveBuffer = [];
-        if (progressEl) progressEl.textContent = `進度: ✓ 辨識成功 (${match})`;
-        break;
+    workerBusy = false;
+
+    if (gestureEl) {
+      if (match) {
+        gestureEl.textContent = `偵測: ${match} (得分: ${score.toFixed(1)})`;
+      } else {
+        gestureEl.textContent = `偵測: 最佳分數 ${score === Infinity ? '--' : score.toFixed(1)}`;
       }
     }
-  }
-};
+
+    if (type === 'RESULT' && match && gameStarted && !gameOver) {
+      for (let b of bombs) {
+        if (b.word === match && !b.shrinking && !b.exploding) {
+          b.startShrink(false);
+          dtwCooldown = 25;
+          liveBuffer = [];
+          if (progressEl) progressEl.textContent = `進度: ✓ 辨識成功 (${match})`;
+          break;
+        }
+      }
+    }
+  };
+  
+  dtwWorker.postMessage({ type: 'LOAD_GESTURES' });
+}
+
+// 初始化啟動 Worker
+initWorker();
 
 let fullVocabulary = [];
-let currentVocabulary = [{ text: '載入中...', difficulty: 1 }]; // fallback
+let currentVocabulary = [{ text: '載入中...', difficulty: 1 }]; 
 let gesturesLoaded = false;
 
 function updateDifficultySelection() {
@@ -253,55 +264,35 @@ function updateDifficultySelection() {
   }
 }
 
-// 監聽難度下拉選單變更
 const difficultySelect = document.getElementById('difficulty-select');
 if (difficultySelect) {
   difficultySelect.addEventListener('change', updateDifficultySelection);
 }
 
-// Start the worker's internal initialization
-dtwWorker.postMessage({ type: 'LOAD_GESTURES' });
-
-const backgroundImg = new Image();
-backgroundImg.src = 'background.png';
-
-const houseImg = new Image();
-houseImg.src = 'house.png';
-
-const planeImg = new Image();
-planeImg.src = 'plane.png';
-
-const bombImg = new Image();
-bombImg.src = 'bomb.png';
-
-const explosionImg = new Image();
-explosionImg.src = 'explosion.png';
+const backgroundImg = new Image(); backgroundImg.src = 'background.png';
+const houseImg = new Image(); houseImg.src = 'house.png';
+const planeImg = new Image(); planeImg.src = 'plane.png';
+const bombImg = new Image(); bombImg.src = 'bomb.png';
+const explosionImg = new Image(); explosionImg.src = 'explosion.png';
 
 function randomVocab() {
   return currentVocabulary[Math.floor(Math.random() * currentVocabulary.length)];
 }
-
-// -----------------------
-// 房子與飛機類別（對應 Python）
-// -----------------------
 
 class Plane {
   constructor() {
     this.width = 120;
     this.height = 50;
     this.x = 0;
-    // 調高飛機高度，避免壓到房子與玩家畫面
     this.y = 50;
     this.speed = 3;
-    this.direction = 1; // 1=右, -1=左
+    this.direction = 1; 
     this.dropCooldown = 150;
   }
 
   move() {
     this.x += this.speed * this.direction;
-
-    // 碰到右邊界或玩家畫面區域就回頭
-    const videoAreaLeft = WIDTH - 260; // 與 index.html 右上攝影機框線對齊
+    const videoAreaLeft = WIDTH - 260; 
     if (this.x + this.width >= videoAreaLeft) {
       this.x = videoAreaLeft - this.width;
       this.direction = -1;
@@ -309,22 +300,7 @@ class Plane {
       this.x = 0;
       this.direction = 1;
     }
-
-    if (this.dropCooldown > 0) {
-      this.dropCooldown -= 1;
-    }
-  }
-
-  maybeDropBomb() {
-    if (this.dropCooldown <= 0) {
-      // 再延長冷卻時間，讓隨機掉落更不頻繁
-      this.dropCooldown = Math.floor(180 + Math.random() * 120); // 180–300 幀
-      const baseX = this.x + this.width / 2 - Bomb.WIDTH / 2;
-      const offset = (Math.random() * 60) - 30;
-      const x = Math.max(0, Math.min(WIDTH - Bomb.WIDTH, baseX + offset));
-      return new Bomb(x, this.y + this.height - 30);
-    }
-    return null;
+    if (this.dropCooldown > 0) this.dropCooldown -= 1;
   }
 
   render(ctx) {
@@ -333,7 +309,6 @@ class Plane {
       const imgW = (planeImg.naturalWidth / planeImg.naturalHeight) * imgH;
       const drawX = this.x + (this.width - imgW) / 2;
       const drawY = this.y;
-      // 水平翻轉與否依 direction 決定
       ctx.save();
       if (this.direction === -1) {
         ctx.translate(drawX + imgW / 2, 0);
@@ -352,7 +327,6 @@ class Plane {
 class Bomb {
   static WIDTH = 100;
   static HEIGHT = 100;
-  // 大幅降低炸彈下降速度
   static SPEED = 1.2;
   static MAX_SHRINK_TIME = 15;
 
@@ -364,9 +338,9 @@ class Bomb {
     this.shrinkTimer = 0;
     this.exploding = false;
     this.explosionTimer = 0;
-    this.shouldExplode = false; // 只在炸到房子或地面時爆炸
-    this.finished = false;      // 縮小結束且不需要爆炸時使用
-    this.impactResolved = false; // 確保只觸發一次（避免落地後每幀連續扣房子）
+    this.shouldExplode = false; 
+    this.finished = false;      
+    this.impactResolved = false; 
   }
 
   fall() {
@@ -375,7 +349,6 @@ class Bomb {
     }
   }
 
-  // shouldExplode = true 代表這顆炸彈之後要播放爆炸動畫（例如炸到房子/地面）
   startShrink(shouldExplode = false) {
     if (this.exploding) return;
     this.shrinking = true;
@@ -387,38 +360,31 @@ class Bomb {
   render(ctx) {
     if (this.finished) return;
 
-    let drawX = this.x;
-    let drawY = this.y;
-    let drawW = Bomb.WIDTH;
-    let drawH = Bomb.HEIGHT;
+    let drawX = this.x; let drawY = this.y;
+    let drawW = Bomb.WIDTH; let drawH = Bomb.HEIGHT;
 
     if (this.shrinking) {
       this.shrinkTimer += 1;
       const ratio = 1 - this.shrinkTimer / Bomb.MAX_SHRINK_TIME;
       if (ratio > 0) {
-        drawW = Bomb.WIDTH * ratio;
-        drawH = Bomb.HEIGHT * ratio;
+        drawW = Bomb.WIDTH * ratio; drawH = Bomb.HEIGHT * ratio;
         const offsetX = (Bomb.WIDTH - drawW) / 2;
         const offsetY = (Bomb.HEIGHT - drawH) / 2;
-        drawX = this.x + offsetX;
-        drawY = this.y + offsetY;
+        drawX = this.x + offsetX; drawY = this.y + offsetY;
       } else {
-        // 縮小結束：依照 shouldExplode 決定是否進入爆炸動畫
         this.shrinking = false;
         if (this.shouldExplode) {
           this.exploding = true;
           this.explosionTimer = 0;
         } else {
-          // 手勢/空白鍵消除：不需要爆炸，標記為完成，等主迴圈移除
           this.finished = true;
         }
       }
     }
 
-    // 爆炸效果（以 explosion.png 為中心顯示）
     if (this.exploding) {
       this.explosionTimer += 1;
-      const maxExplosionFrames = 10; // 爆炸維持幾幀
+      const maxExplosionFrames = 10; 
       const size = Bomb.WIDTH * 1.3;
       const ex = this.x + (Bomb.WIDTH - size) / 2;
       const ey = this.y + (Bomb.HEIGHT - size) / 2;
@@ -432,7 +398,6 @@ class Bomb {
         ctx.fill();
       }
 
-      // 爆炸時不再畫炸彈本體與文字
       if (this.explosionTimer >= maxExplosionFrames) {
         this.exploding = false;
         this.finished = true;
@@ -450,30 +415,19 @@ class Bomb {
     ctx.fillStyle = '#FFF';
     ctx.font = '24px Arial';
     ctx.textAlign = 'center';
-    // 在這裡調整文字在炸彈上的位置（偏移量）
-    const textOffsetX = 0;   // 正數往右、負數往左
-    const textOffsetY = 10;  // 正數往下、負數往上
-    ctx.fillText(
-      this.word,
-      this.x + Bomb.WIDTH / 2 + textOffsetX,
-      this.y + Bomb.HEIGHT / 2 + textOffsetY
-    );
+    const textOffsetX = 0;   
+    const textOffsetY = 10;  
+    ctx.fillText(this.word, this.x + Bomb.WIDTH / 2 + textOffsetX, this.y + Bomb.HEIGHT / 2 + textOffsetY);
   }
 }
 
-// -----------------------
-// 動態手勢偵測（變成包裝 Worker 消息的线上處理）
-// -----------------------
-
 let lastHandLandmarks = null;
 let lastVideoFrame = null;
-
 const LIVE_BUFFER_MAX = 45;
-// 至少要蒐集這麼多幀才觸發比對
 const LIVE_BUFFER_REQUIRED = 20;
 let liveBuffer = [];
 let dtwCooldown = 0;
-let handWasPresent = false;  // 追蹤手是否剛離開畫面
+let handWasPresent = false;  
 
 function resetGestureSequence() {
   liveBuffer = [];
@@ -484,9 +438,7 @@ function resetGestureSequence() {
 }
 
 function getRawHandsFlat(results) {
-  let left_hand = null;
-  let right_hand = null;
-
+  let left_hand = null; let right_hand = null;
   if (results.multiHandLandmarks && results.multiHandedness) {
     for (let i = 0; i < results.multiHandedness.length; i++) {
       const label = results.multiHandedness[i].label;
@@ -495,8 +447,8 @@ function getRawHandsFlat(results) {
     }
   }
 
-  const numPoints = 42; // Actually 21 points per hand, each is (x,y) raw
-  const flat = new Float32Array(84); // 21 * 2 * 2
+  const numPoints = 42; 
+  const flat = new Float32Array(84); 
   let idx = 0;
 
   function addHand(hand) {
@@ -505,13 +457,11 @@ function getRawHandsFlat(results) {
       return;
     }
     for (const p of hand) {
-      flat[idx++] = p.x;
-      flat[idx++] = p.y;
+      flat[idx++] = p.x; flat[idx++] = p.y;
     }
   }
   
-  addHand(left_hand);
-  addHand(right_hand);
+  addHand(left_hand); addHand(right_hand);
   return flat;
 }
 
@@ -529,20 +479,32 @@ function updateDynamicGesture(results) {
       for (let f = 0; f < liveFrames; f++) {
         liveFlat.set(liveBuffer[f], f * numPoints * 2);
       }
+      
       workerBusy = true;
+      
+      // 🛑 防線四：送出運算前，啟動 3 秒超時自毀裝置
+      clearTimeout(dtwTimeout);
+      dtwTimeout = setTimeout(() => {
+          console.warn("🛑 防呆：AI 運算超時！強制重置 Worker...");
+          dtwWorker.terminate(); // 殺掉卡死的舊員工
+          initWorker();          // 重新聘請新員工
+          workerBusy = false;
+          dtwCooldown = 0;
+          alert("手勢運算太複雜卡住了，已為您自動重新啟動 AI 引擎！");
+      }, 3000);
+
       dtwWorker.postMessage(
         { type: 'MATCH', data: { liveFlat, liveFrames, numPoints, activeWords, threshold: 40.0 } },
         [liveFlat.buffer]
       );
     }
     handWasPresent = false;
-    liveBuffer = []; // 手離開後清空，下次需從頭弁
+    liveBuffer = []; 
     if (progressEl && dtwCooldown <= 0) progressEl.textContent = '進度: 等待手勢...';
     return;
   }
 
   handWasPresent = true;
-  
   const frame = getRawHandsFlat(results);
   liveBuffer.push(frame);
   if (liveBuffer.length > LIVE_BUFFER_MAX) liveBuffer.shift();
@@ -554,8 +516,6 @@ function updateDynamicGesture(results) {
 
 function initHouses() {
   houses = [];
-
-  // 盡量隨機分散在底部，避免完全重疊（簡化版）
   const attemptsLimit = 5000;
   let attempts = 0;
   while (houses.length < HOUSE_COUNT && attempts < attemptsLimit) {
@@ -566,14 +526,9 @@ function initHouses() {
     let overlapSameSpot = false;
     for (const h of houses) {
       const samePos = Math.abs(h.x - rect.x) < 1 && Math.abs(h.y - rect.y) < 1;
-      if (samePos) {
-        overlapSameSpot = true;
-        break;
-      }
+      if (samePos) { overlapSameSpot = true; break; }
     }
-    if (!overlapSameSpot) {
-      houses.push(rect);
-    }
+    if (!overlapSameSpot) houses.push(rect);
     attempts += 1;
   }
 
@@ -588,11 +543,9 @@ function updateHud() {
   scoreEl.textContent = `房子數: ${houses.length}`;
   lifeEl.textContent = `已掉落炸彈: ${totalBombsDropped}/${TARGET_BOMBS}`;
 
-  // 🌟 新增：讓狀態列優先顯示「音樂解析」的進度
   if (isAnalyzing) {
     statusEl.textContent = '狀態: 🎵 音樂解析中，請稍候...';
   } else if (!gameStarted) {
-    // 判斷是否已經有炸彈劇本了
     if (musicBeats.length > 0) {
       statusEl.textContent = `狀態: ✅ 載入 ${TARGET_BOMBS} 顆炸彈 (按 Enter 開始)`;
     } else {
@@ -607,10 +560,6 @@ function updateHud() {
   }
 }
 
-// -----------------------
-// 主迴圈（對應 Python while True）
-// -----------------------
-
 function gameLoop() {
   ctx.clearRect(0, 0, WIDTH, HEIGHT);
 
@@ -618,21 +567,16 @@ function gameLoop() {
     if (backgroundImg.complete && backgroundImg.naturalWidth > 0) {
       ctx.drawImage(backgroundImg, 0, 0, WIDTH, HEIGHT);
     } else {
-      ctx.fillStyle = '#003366';
-      ctx.fillRect(0, 0, WIDTH, HEIGHT);
+      ctx.fillStyle = '#003366'; ctx.fillRect(0, 0, WIDTH, HEIGHT);
     }
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
-    ctx.fillStyle = '#FFF';
-    ctx.font = '48px Arial';
-    ctx.textAlign = 'center';
+    ctx.fillStyle = '#FFF'; ctx.font = '48px Arial'; ctx.textAlign = 'center';
     if (!gesturesLoaded) {
       ctx.fillText('正在載入詞彙，請稍候...', WIDTH / 2, Math.max(HEIGHT / 2, 50));
     } else {
       ctx.fillText('按 Enter 鍵開始遊戲', WIDTH / 2, Math.max(HEIGHT / 2, 50));
     }
-
-    // 即使沒開始，也要更新上方的狀態，且因為有攝像頭所以最好繼續 requestAnimationFrame
     updateHud();
     requestAnimationFrame(gameLoop);
     return;
@@ -640,88 +584,58 @@ function gameLoop() {
 
   frameCounter += 1;
 
-  // 背景（使用背景圖，若未載入則用純色）
   if (backgroundImg.complete && backgroundImg.naturalWidth > 0) {
     ctx.drawImage(backgroundImg, 0, 0, WIDTH, HEIGHT);
   } else {
-    ctx.fillStyle = '#003366';
-    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+    ctx.fillStyle = '#003366'; ctx.fillRect(0, 0, WIDTH, HEIGHT);
   }
 
-  // 右上角攝影機畫面（鏡像）與節點：都畫在 canvas 上
-  const camX = WIDTH - 260;
-  const camY = 10;
-  const camW = 240;
-  const camH = 180;
+  const camX = WIDTH - 260; const camY = 10;
+  const camW = 240; const camH = 180;
 
   if (lastVideoFrame) {
-    // 先畫鏡像的攝影機畫面
     ctx.save();
-    ctx.translate(camX + camW, camY);
-    ctx.scale(-1, 1);
+    ctx.translate(camX + camW, camY); ctx.scale(-1, 1);
     ctx.drawImage(lastVideoFrame, 0, 0, camW, camH);
     ctx.restore();
   }
 
-  ctx.strokeStyle = '#0f0';
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#0f0'; ctx.lineWidth = 2;
   ctx.strokeRect(camX, camY, camW, camH);
 
-  // 再畫手部節點，座標也要鏡像（x -> 1 - x）
   if (lastHandLandmarks && lastHandLandmarks.length > 0) {
     ctx.fillStyle = '#0f0';
     for (const hand of lastHandLandmarks) {
       for (const lm of hand) {
-        const xNorm = 1 - lm.x; // 水平鏡像
+        const xNorm = 1 - lm.x; 
         const x = camX + xNorm * camW;
         const y = camY + lm.y * camH;
-        ctx.beginPath();
-        ctx.arc(x, y, 3, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
       }
     }
   }
 
   if (!gameOver) {
-    // 飛機依然要在天上巡邏移動
     plane.move();
 
-    // ✅ 刪除了舊的隨機與保底機制
-    // ✅ 新增：精準音樂對拍空投系統
     if (gameStarted) {
       let currentTime = bgmPlayer.currentTime; 
-      
-      // 🌟 1. 精算掉落時間 (物理學公式：時間 = 距離 / 速度)
-      // 掉落距離大概是：總高度(800) - 房子高度(80) - 上方預留空間(約150) = 570 像素
       let dropDistance = HEIGHT - HOUSE_HEIGHT - 150; 
-      
-      // 算出炸彈飛完這段距離需要幾秒 (乘以 60 是因為每秒大約 60 幀)
       let travelTime = dropDistance / (Bomb.SPEED * 60); 
-
-      // 🌟 2. 啟動「未來視」：讓程式去看 (現在時間 + 飛行時間) 的劇本
       let lookAheadTime = currentTime + travelTime;
 
-      // 🌟 3. 用「未來的時間」來觸發投彈
       while (currentBeatIndex < musicBeats.length && lookAheadTime >= musicBeats[currentBeatIndex].time) {
-        
         let targetLane = musicBeats[currentBeatIndex].lane;
         let usableWidth = WIDTH - 260; 
         let laneX = (usableWidth / 3) * targetLane + (usableWidth / 6) - (Bomb.WIDTH / 2);
 
         plane.x = laneX; 
         
-        // 1. 計算這顆炸彈原本「應該被丟出來的時間」
         let targetTime = musicBeats[currentBeatIndex].time;
         let spawnTime = targetTime - travelTime;
-
-        // 2. 計算它「遲到」了幾秒 (通常只有遊戲剛開始前幾秒的炸彈會遲到)
         let timeOverdue = currentTime - spawnTime;
-
-        // 3. 根據遲到的時間，把它往下推！(遲到幾秒 * 每秒掉落的像素)
-        // 使用 Math.max 確保只有正數才會往下推
         let offsetY = Math.max(0, timeOverdue * (Bomb.SPEED * 60));
         
-        // 4. 加上補償距離，把它生在正確的半空中
         const dropY = plane.y + plane.height - 30 + offsetY;
         bombs.push(new Bomb(laneX, dropY));
         
@@ -731,7 +645,6 @@ function gameLoop() {
     }
   }
 
-  // 畫房子
   ctx.fillStyle = '#ffaa00';
   for (const h of houses) {
     if (houseImg.complete && houseImg.naturalWidth > 0) {
@@ -741,14 +654,12 @@ function gameLoop() {
     }
   }
 
-  // 更新炸彈
   if (!gameOver) {
     for (let i = bombs.length - 1; i >= 0; i--) {
       const b = bombs[i];
       b.fall();
       b.render(ctx);
 
-      // 到地面或碰到房子就縮小並爆炸，隨機消除一棟房子
       const bombBottom = b.y + Bomb.HEIGHT;
       let hitAnyHouse = false;
 
@@ -757,60 +668,42 @@ function gameLoop() {
         const collideX = b.x < h.x + h.width && b.x + Bomb.WIDTH > h.x;
         const collideY = b.y < h.y + h.height && bombBottom > h.y;
         if (collideX && collideY) {
-          hitAnyHouse = true;
-          break;
+          hitAnyHouse = true; break;
         }
       }
 
       if (!b.impactResolved && !b.shrinking && !b.exploding && (hitAnyHouse || bombBottom >= HEIGHT)) {
-        // 無論是炸到房子或地面：縮小後要爆炸，並隨機消除一棟房子
         b.startShrink(true);
         if (houses.length > 0) {
           const idx = Math.floor(Math.random() * houses.length);
           houses.splice(idx, 1);
           if (houses.length === 0) {
-            gameOver = true;
-            win = false;
+            gameOver = true; win = false;
           }
         }
       }
 
-      // 手勢/空白鍵消除：縮小動畫結束（finished=true）後直接移除
-      // 或是縮小 + 爆炸動畫都結束後才真正移除炸彈
       if (!b.shrinking && !b.exploding && (b.finished || b.shrinkTimer > Bomb.MAX_SHRINK_TIME)) {
         bombs.splice(i, 1);
       }
     }
 
-    // 勝利條件：炸彈丟完且場上沒有炸彈、還有房子
     if (!gameOver && totalBombsDropped >= TARGET_BOMBS && bombs.length === 0 && houses.length > 0) {
-      gameOver = true;
-      win = true;
+      gameOver = true; win = true;
     }
   } else {
-    // 遊戲結束畫面
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+    ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 0, WIDTH, HEIGHT);
     ctx.fillStyle = win ? '#00ff00' : '#ff0000';
-    ctx.font = '48px Arial';
-    ctx.textAlign = 'center';
+    ctx.font = '48px Arial'; ctx.textAlign = 'center';
     ctx.fillText(win ? '勝利！' : '失敗', WIDTH / 2, HEIGHT / 2 - 20);
-    ctx.fillStyle = '#FFF';
-    ctx.font = '32px Arial';
+    ctx.fillStyle = '#FFF'; ctx.font = '32px Arial';
     ctx.fillText('按 Enter 鍵重新開始', WIDTH / 2, HEIGHT / 2 + 40);
   }
 
-  // 畫飛機
   plane.render(ctx);
-
   updateHud();
-
   requestAnimationFrame(gameLoop);
 }
-
-// -----------------------------------
-// MediaPipe Hands 啟用（主執行緒優化版）
-// -----------------------------------
 
 async function initWebcam() {
   if (!window.Hands || !window.Camera) {
@@ -821,8 +714,7 @@ async function initWebcam() {
   statusEl.textContent = '狀態: 正在載入 AI 引擎...';
 
   const hands = new window.Hands({
-    locateFile: (file) =>
-      `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
   });
 
   hands.setOptions({
@@ -834,33 +726,19 @@ async function initWebcam() {
 
   hands.onResults((results) => {
     if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-      lastHandLandmarks = results.multiHandLandmarks; // 儲存所有偵測到的手，用來繪製雙手
-
-      // 不管有沒有遊戲結束都偵測並更新緩衝
-      if (gameStarted && !gameOver) {
-        updateDynamicGesture(results);
-      }
-
+      lastHandLandmarks = results.multiHandLandmarks; 
+      if (gameStarted && !gameOver) updateDynamicGesture(results);
     } else {
       lastHandLandmarks = null;
-      if (gameStarted && !gameOver) {
-        updateDynamicGesture(null);
-      }
+      if (gameStarted && !gameOver) updateDynamicGesture(null);
     }
-
-    if (results.image) {
-      lastVideoFrame = results.image;
-    }
-
-    // 辨識完成，允許處理下一幀
+    if (results.image) lastVideoFrame = results.image;
     isProcessingFrame = false;
   });
 
   const camera = new window.Camera(video, {
     onFrame: async () => {
-      // 若上一幀還沒處理完，直接拋棄這一幀 (Drop frame)，保證遊戲畫面順暢
       if (isProcessingFrame) return;
-
       isProcessingFrame = true;
       try {
         await hands.send({ image: video });
@@ -873,38 +751,41 @@ async function initWebcam() {
     height: 480,
   });
 
-  await camera.start();
-  statusEl.textContent = '狀態: 已連線攝像頭（可進行手勢偵測）';
+  // 🛑 防線三：使用 Try-Catch 攔截攝影機權限與硬體錯誤
+  try {
+    await camera.start();
+    statusEl.textContent = '狀態: 已連線攝像頭（可進行手勢偵測）';
+  } catch (error) {
+    console.error("攝影機啟動失敗:", error);
+    if (error.name === 'NotAllowedError' || error.message.includes('Permission')) {
+        alert("你拒絕了攝影機權限喔！請在網址列旁邊點擊鎖頭圖示解鎖攝影機，然後重新整理網頁。");
+    } else if (error.name === 'NotFoundError' || error.message.includes('Device not found')) {
+        alert("找不到攝影機！請確認你的電腦有連接視訊鏡頭。");
+    } else {
+        alert("攝影機啟動失敗，請確認沒有其他程式 (如 Zoom) 正在佔用攝影機。");
+    }
+    statusEl.textContent = '狀態: 無法存取攝影機（仍可遊玩）';
+  }
 }
-
-// -----------------------
-// 初始化與輸入（暫用鍵盤模擬手勢）
-// -----------------------
 
 function initGame() {
   initHouses();
   plane = new Plane();
 
-  // 新增 Enter 鍵控制遊戲開始與重新開始，保留 Space 鍵為手勢模擬
   window.addEventListener('keydown', (e) => {
     if (e.code === 'Enter') {
       e.preventDefault();
 
-      // 🌟 新增 1：防呆機制！如果玩家沒上傳音樂就按 Enter，要擋住他
       if (musicBeats.length === 0 || isAnalyzing) {
         alert("請先上傳音樂並等待解析完成喔！");
         return; 
       }
 
       if (!gameStarted) {
-        if (!gesturesLoaded) return; // 詞彙還沒載入，不允許開始
+        if (!gesturesLoaded) return; 
         gameStarted = true;
-        
-        // 🌟 新增 2：第一次開始遊戲，把音樂催落去！
         bgmPlayer.play(); 
-
       } else if (gameOver) {
-        // 重新開始
         gameStarted = true;
         gameOver = false;
         win = false;
@@ -913,8 +794,6 @@ function initGame() {
         initHouses();
         plane = new Plane();
         resetGestureSequence();
-
-        // 🌟 新增 3：死掉重新開始時，節拍索引歸零、音樂拉回最開頭並播放
         currentBeatIndex = 0;
         bgmPlayer.currentTime = 0;
         bgmPlayer.play();
@@ -923,7 +802,6 @@ function initGame() {
 
     if (e.code === 'Space' && !gameOver && gameStarted) {
       if (bombs.length > 0) {
-        // 空白鍵消除：只縮小，不爆炸
         bombs[0].startShrink(false);
       }
     }
