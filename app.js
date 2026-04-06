@@ -330,9 +330,10 @@ class Bomb {
   static SPEED = 1.2;
   static MAX_SHRINK_TIME = 15;
 
-  constructor(x, y) {
+  constructor(x, y, targetTime) {
     this.x = x ?? Math.random() * (WIDTH - Bomb.WIDTH);
     this.y = y ?? -Bomb.HEIGHT;
+    this.targetTime = targetTime;
     this.word = randomVocab().text;
     this.shrinking = false;
     this.shrinkTimer = 0;
@@ -637,7 +638,7 @@ function gameLoop() {
         let offsetY = Math.max(0, timeOverdue * (Bomb.SPEED * 60));
         
         const dropY = plane.y + plane.height - 30 + offsetY;
-        bombs.push(new Bomb(laneX, dropY));
+        bombs.push(new Bomb(laneX, dropY, targetTime));
         
         totalBombsDropped += 1;
         currentBeatIndex += 1; 
@@ -673,6 +674,8 @@ function gameLoop() {
       }
 
       if (!b.impactResolved && !b.shrinking && !b.exploding && (hitAnyHouse || bombBottom >= HEIGHT)) {
+        let error = Math.abs(bgmPlayer.currentTime - b.targetTime);
+        console.log(`[誤差測試] 目標: ${b.targetTime.toFixed(3)}s | 實際: ${bgmPlayer.currentTime.toFixed(3)}s | 誤差: ${error.toFixed(3)} 秒`);
         b.startShrink(true);
         if (houses.length > 0) {
           const idx = Math.floor(Math.random() * houses.length);
