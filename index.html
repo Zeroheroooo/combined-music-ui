@@ -12,13 +12,11 @@
             color: #fff;
             font-family: Arial, sans-serif;
         }
-        /* 讓遊戲畫面填滿整個視窗 */
         #canvas {
             display: block;
             width: 100vw;
             height: 100vh;
         }
-        /* 將 UI 顯示在螢幕上方中央 */
         #ui {
             position: absolute;
             top: 10px;
@@ -34,13 +32,8 @@
             font-size: 20px;
             font-weight: 600;
         }
-        #ui p {
-            margin: 0;
-            pointer-events: auto;
-        }
-        #ui select {
-            pointer-events: auto;
-        }
+        #ui p { margin: 0; pointer-events: auto; }
+        #ui select { pointer-events: auto; }
         #video {
             position: absolute;
             right: 10px;
@@ -48,8 +41,8 @@
             width: 240px;
             height: 180px;
             border: 2px solid #0f0;
-            z-index: 1; /* 只作為 MediaPipe 輸入，不直接顯示 */
-            opacity: 0; /* 隱藏實際影片，由 canvas 負責畫出鏡像畫面 */
+            z-index: 1; 
+            opacity: 0; 
         }
     </style>
 </head>
@@ -71,12 +64,12 @@
         <label for="audioUpload" style="font-size: 16px; font-weight: bold; cursor: pointer;">
             🎵 點此上傳你的音樂 (MP3)
         </label>
-        <input type="file" id="audioUpload" accept="audio/*" style="display: block; margin-top: 5px;">
-        <audio id="bgmPlayer" style="display: none;"></audio> </div>
+        <input type="file" id="audioUpload" accept="audio/mp3, audio/wav, audio/ogg, audio/mpeg" style="display: block; margin-top: 5px;">
+        <audio id="bgmPlayer" style="display: none;"></audio> 
+    </div>
     <canvas id="canvas" width="600" height="800"></canvas>
     <video id="video" autoplay playsinline muted></video>
 
-    <!-- MediaPipe Hands JS (瀏覽器版) -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 
