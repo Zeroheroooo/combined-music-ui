@@ -1,3 +1,4 @@
+const AUDIO_OFFSET = 0.08;
 // ==========================================
 // 🚀 核心演算法：Audiosurf 動態門檻節奏分析 (JS 移植版)
 // ==========================================
@@ -620,7 +621,7 @@ function gameLoop() {
     plane.move();
 
     if (gameStarted) {
-      let currentTime = bgmPlayer.currentTime; 
+      let currentTime = bgmPlayer.currentTime + AUDIO_OFFSET;
       let dropDistance = HEIGHT - HOUSE_HEIGHT - 150; 
       let travelTime = dropDistance / (Bomb.SPEED * 60); 
       let lookAheadTime = currentTime + travelTime;
