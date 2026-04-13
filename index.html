@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
+
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -12,67 +13,126 @@
             color: #fff;
             font-family: Arial, sans-serif;
         }
+
         #canvas {
             display: block;
             width: 100vw;
             height: 100vh;
         }
+
         #ui {
             position: absolute;
             top: 10px;
-            left: 50%;
-            transform: translateX(-50%);
+            left: 10px;
             z-index: 10;
             display: flex;
-            gap: 16px;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
+            flex-direction: column;
+            gap: 8px;
+            align-items: flex-start;
+            text-align: left;
             pointer-events: none;
-            font-size: 20px;
+            font-size: 16px;
             font-weight: 600;
+            max-width: 500px;
         }
-        #ui p { margin: 0; pointer-events: auto; }
-        #ui select { pointer-events: auto; }
+
+        #ui-row {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+            pointer-events: auto;
+        }
+
+        #ui p {
+            margin: 0;
+            pointer-events: auto;
+        }
+
+        #ui select {
+            pointer-events: auto;
+        }
+
+        .btn {
+            font-size: 16px;
+            padding: 8px 16px;
+            background: #00aa00;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            pointer-events: auto;
+            transition: background 0.2s;
+        }
+
+        .btn:hover {
+            background: #00dd00;
+        }
+
+        .btn-pause {
+            background: #ff6600;
+        }
+
+        .btn-pause:hover {
+            background: #ff9900;
+        }
+
         #video {
             position: absolute;
             right: 10px;
             top: 10px;
-            width: 240px;
+            width: 320px;
             height: 180px;
             border: 2px solid #0f0;
-            z-index: 1; 
-            opacity: 0; 
+            z-index: 1;
+            opacity: 0;
         }
     </style>
 </head>
+
 <body>
     <div id="ui">
-        <select id="difficulty-select" style="font-size: 18px; padding: 4px; background: #333; color: #fff; border: 1px solid #777; border-radius: 4px; outline: none; cursor: pointer;">
-            <option value="all">所有難度</option>
-            <option value="1">等級 1 (簡單)</option>
-            <option value="2">等級 2 (中等)</option>
-            <option value="3">等級 3 (困難)</option>
-        </select>
+        <div id="ui-row">
+            <select id="difficulty-select"
+                style="font-size: 14px; padding: 4px; background: #333; color: #fff; border: 1px solid #777; border-radius: 4px; outline: none; cursor: pointer;">
+                <option value="all">所有難度</option>
+                <option value="1">等級 1 (簡單)</option>
+                <option value="2">等級 2 (中等)</option>
+                <option value="3">等級 3 (困難)</option>
+            </select>
+            <button id="start-btn" class="btn" style="display:none;">
+                開始遊戲
+            </button>
+            <button id="pause-btn" class="btn btn-pause" style="display:none;">
+                暫停
+            </button>
+        </div>
+
+        <div style="background: rgba(0,0,0,0.5); padding: 8px; border-radius: 4px; border: 1px dashed #0f0; width: 100%; box-sizing: border-box; margin-top: 5px;">
+            <label for="audioUpload" style="font-size: 14px; font-weight: bold; cursor: pointer; color: #0f0; display: block; margin-bottom: 4px;">
+                🎵 第一步：點此上傳音樂 (必須)
+            </label>
+            <input type="file" id="audioUpload" accept="audio/mp3, audio/wav, audio/ogg" style="width: 100%; font-size: 12px; color: #fff;">
+            <audio id="bgmPlayer" style="display: none;"></audio>
+        </div>
         <p id="status">狀態: 準備中</p>
-        <p id="score">分數: 0</p>
-        <p id="life">生命: 10</p>
+        <p id="score">房子數: 10</p>
+        <p id="life">已掉落: 0/15</p>
         <p id="gesture">偵測: 無</p>
         <p id="progress">進度: 等待手勢...</p>
-    </div>
-    <div style="position: absolute; top: 10px; left: 10px; z-index: 10; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 8px; color: white;">
-        <label for="audioUpload" style="font-size: 16px; font-weight: bold; cursor: pointer;">
-            🎵 點此上傳你的音樂 (MP3)
-        </label>
-        <input type="file" id="audioUpload" accept="audio/mp3, audio/wav, audio/ogg, audio/mpeg" style="display: block; margin-top: 5px;">
-        <audio id="bgmPlayer" style="display: none;"></audio> 
     </div>
     <canvas id="canvas" width="600" height="800"></canvas>
     <video id="video" autoplay playsinline muted></video>
 
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <!-- ONNX Runtime Web -->
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
 
-    <script type="module" src="app.js"></script>
+    <!-- 138 維特徵提取 (從 features_holistic.py 轉換) -->
+    <script src="holistic_features.js?v=20260413"></script>
+
+    <!-- MediaPipe Tasks Vision (ES Module) + 主程式 -->
+    <script type="module" src="app.js?v=20260413"></script>
 </body>
+
 </html>
