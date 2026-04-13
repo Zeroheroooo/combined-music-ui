@@ -1,65 +1,82 @@
-const AUDIO_OFFSET = 0.08;
-// ==========================================
-// 🚀 核心演算法：Audiosurf 動態門檻節奏分析 (JS 移植版)
-// ==========================================
+// app.js: 台灣手語學習遊戲 Web 版
+// 使用 ONNX Transformer 模型進行手語辨識
+
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const statusEl = document.getElementById('status');
+const scoreEl = document.getElementById('score');
+const lifeEl = document.getElementById('life');
+const video = document.getElementById('video');
+const gestureEl = document.getElementById('gesture');
+const progressEl = document.getElementById('progress');
+const startBtn = document.getElementById('start-btn');
+const pauseBtn = document.getElementById('pause-btn');
+
+let WIDTH = 600;
+let HEIGHT = 800;
+
+function resizeCanvasToWindow() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  WIDTH = canvas.width;
+  HEIGHT = canvas.height;
+}
+window.addEventListener('resize', resizeCanvasToWindow);
+resizeCanvasToWindow();
+
+
+// ****************************************************************************
+// ****************************************************************************
+// 🎵🎵🎵🎵🎵 【音樂對拍系統：變數宣告與檔案防呆解析】 🎵🎵🎵🎵🎵
 let musicBeats = [];
 let currentBeatIndex = 0;
 let isAnalyzing = false;
-let globalBpm = 120.0;
-
+const AUDIO_OFFSET = 0.08; // 🌟 為了教授要求的 <150ms 誤差校正值
 const bgmPlayer = document.getElementById('bgmPlayer');
 const audioUpload = document.getElementById('audioUpload');
 
-// 當玩家選擇檔案時觸發
-audioUpload.addEventListener('change', async function(e) {
-    const file = e.target.files[0];
-    if (!file) return;
+if (audioUpload) {
+    audioUpload.addEventListener('change', async function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
 
-    // 🛑 防線一：限制檔案大小 (15 MB)，防止記憶體撐爆
-    const maxSize = 15 * 1024 * 1024; 
-    if (file.size > maxSize) {
-        alert("這首歌太長或檔案太大囉！請上傳 15MB 以下的音樂檔。");
-        e.target.value = ''; // 清空上傳欄位
-        return; 
-    }
+        // 🛑 音樂系統防線一：限制檔案大小 (15 MB)
+        const maxSize = 15 * 1024 * 1024; 
+        if (file.size > maxSize) {
+            alert("請上傳 15MB 以下的音樂檔。");
+            e.target.value = ''; return; 
+        }
 
-    // 🛑 防線二：開始解析時，鎖死上傳按鈕，防止玩家狂點上傳產生多重宇宙
-    audioUpload.disabled = true;
+        // 🛑 音樂系統防線二：開始解析時鎖死按鈕
+        audioUpload.disabled = true;
+        if (startBtn) startBtn.disabled = true; 
 
-    if (statusEl) statusEl.textContent = '狀態: 🎵 音樂解析中，請稍候...';
-    isAnalyzing = true;
+        if (statusEl) statusEl.textContent = '狀態: 🎵 音樂解析中...';
+        isAnalyzing = true;
 
-    try {
-        // 1. 建立隱藏的音樂播放源
-        const fileURL = URL.createObjectURL(file);
-        bgmPlayer.src = fileURL;
+        try {
+            const fileURL = URL.createObjectURL(file);
+            bgmPlayer.src = fileURL;
+            const arrayBuffer = await file.arrayBuffer();
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+            musicBeats = await analyzeBeatsSmartJS(audioBuffer);
+            if (statusEl) statusEl.textContent = `狀態: ✅ 解析完成！載入 ${TARGET_BOMBS} 顆炸彈`;
+        } catch (error) {
+            console.error("音樂解析失敗:", error);
+            alert("這首音樂無法解析，請換一首歌！");
+            if (statusEl) statusEl.textContent = '狀態: 音樂解析失敗';
+        } finally {
+            isAnalyzing = false;
+            audioUpload.disabled = false;
+            if (startBtn && modelLoaded && gesturesLoaded) startBtn.disabled = false;
+        }
+    });
+}
 
-        // 2. 讀取檔案二進位資料給 Web Audio API 解析
-        const arrayBuffer = await file.arrayBuffer();
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-
-        // 3. 執行你自創的「智慧分析演算法」
-        musicBeats = await analyzeBeatsSmartJS(audioBuffer);
-        
-        if (statusEl) statusEl.textContent = '狀態: ✅ 解析完成！按 Enter 開始遊戲';
-    } catch (error) {
-        // 🛑 捕捉音樂解析失敗的極端狀況
-        console.error("音樂解析失敗:", error);
-        alert("這首音樂無法解析，請換一首歌試試看！");
-        if (statusEl) statusEl.textContent = '狀態: 準備中 (請重新上傳)';
-    } finally {
-        isAnalyzing = false;
-        // 🛑 防線二：解析完成或失敗後，解鎖上傳按鈕
-        audioUpload.disabled = false;
-    }
-});
-
-// 你 Python 裡的 analyze_beats_smart 完整 JS 翻譯版
 async function analyzeBeatsSmartJS(audioBuffer) {
     const duration = audioBuffer.duration;
     const sampleRate = audioBuffer.sampleRate;
-    
     const offlineCtx = new OfflineAudioContext(3, audioBuffer.length, sampleRate);
     const source = offlineCtx.createBufferSource();
     source.buffer = audioBuffer;
@@ -73,7 +90,6 @@ async function analyzeBeatsSmartJS(audioBuffer) {
     source.connect(bandPass).connect(merger, 0, 1);
     source.connect(highPass).connect(merger, 0, 2);
     merger.connect(offlineCtx.destination);
-    
     source.start(0);
     const renderedBuffer = await offlineCtx.startRendering(); 
 
@@ -81,19 +97,14 @@ async function analyzeBeatsSmartJS(audioBuffer) {
         const windowSize = Math.floor(sampleRate * 0.05); 
         const stepSize = Math.floor(sampleRate * 0.01);   
         let energy = [];
-        
         for (let i = 0; i < channelData.length - windowSize; i += stepSize) {
             let sum = 0;
             for (let j = 0; j < windowSize; j++) sum += channelData[i+j] * channelData[i+j];
             energy.push(Math.sqrt(sum / windowSize));
         }
-        
-        const maxE = Math.max(...energy);
-        const minE = Math.min(...energy);
+        const maxE = Math.max(...energy); const minE = Math.min(...energy);
         const normEnergy = energy.map(e => (e - minE) / (maxE - minE + 1e-6));
-
-        let threshold = 0.35;
-        let events = [];
+        let threshold = 0.35; let events = [];
         for (let attempt = 0; attempt < 6; attempt++) {
             events = [];
             for (let i = 1; i < normEnergy.length - 1; i++) {
@@ -113,31 +124,24 @@ async function analyzeBeatsSmartJS(audioBuffer) {
     const eventsLow = getOnsetEvents(renderedBuffer.getChannelData(0), 0, 0.5, 1.0);
     const eventsMid = getOnsetEvents(renderedBuffer.getChannelData(1), 1, 0.5, 1.0);
     const eventsHigh = getOnsetEvents(renderedBuffer.getChannelData(2), 2, 0.5, 1.0);
-
     let allEvents = [...eventsLow, ...eventsMid, ...eventsHigh];
     allEvents.sort((a, b) => a.time - b.time);
 
-    let filteredEvents = [];
-    let lastBombTime = -999.0;
+    let filteredEvents = []; let lastBombTime = -999.0;
     for (let ev of allEvents) {
         if (ev.time - lastBombTime >= 3.0) {
-            filteredEvents.push(ev);
-            lastBombTime = ev.time;
+            filteredEvents.push(ev); lastBombTime = ev.time;
         }
     }
-
+    
     let finalEvents = [];
-    const fillInterval = 3.0; 
-    const MAX_EMPTY_GAP = 5.0;
-
     if (filteredEvents.length > 0) {
         finalEvents.push(filteredEvents[0]);
         for (let i = 1; i < filteredEvents.length; i++) {
             let prevTime = finalEvents[finalEvents.length - 1].time;
             let curr = filteredEvents[i];
-            
-            while (curr.time - prevTime > MAX_EMPTY_GAP) {
-                let fillerTime = prevTime + fillInterval;
+            while (curr.time - prevTime > 5.0) {
+                let fillerTime = prevTime + 3.0;
                 if (curr.time - fillerTime < 1.0) break;
                 finalEvents.push({ time: fillerTime, lane: Math.floor(Math.random() * 3) });
                 prevTime = fillerTime;
@@ -145,37 +149,17 @@ async function analyzeBeatsSmartJS(audioBuffer) {
             finalEvents.push(curr);
         }
     }
-    
-    console.log(`🎵 音樂分析完成！共產生 ${finalEvents.length} 顆炸彈。`);
     TARGET_BOMBS = finalEvents.length; 
     return finalEvents;
 }
+// 🎵🎵🎵🎵🎵 【音樂對拍系統：解析引擎結束】 🎵🎵🎵🎵🎵
+// ****************************************************************************
+// ****************************************************************************
 
-// ==========================================
-// app.js: 台灣手語學習遊戲 Web 版
-// ==========================================
 
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
-const statusEl = document.getElementById('status');
-const scoreEl = document.getElementById('score');
-const lifeEl = document.getElementById('life');
-const video = document.getElementById('video');
-const gestureEl = document.getElementById('gesture');
-const progressEl = document.getElementById('progress');
-
-let WIDTH = 600;
-let HEIGHT = 800;
-
-function resizeCanvasToWindow() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-  WIDTH = canvas.width;
-  HEIGHT = canvas.height;
-}
-window.addEventListener('resize', resizeCanvasToWindow);
-resizeCanvasToWindow();
-
+// -----------------------
+// 遊戲狀態
+// -----------------------
 let score = 0;
 let bombs = [];
 let frameCounter = 0;
@@ -189,79 +173,59 @@ let houses = [];
 let plane = null;
 let totalBombsDropped = 0;
 const MIN_ACTIVE_BOMBS = 2;
-let TARGET_BOMBS = 15;
+// ****************************************************************************
+// ****************************************************************************
+// 💥 【音樂系統更動】：把 const 改成了 let，因為音樂會動態改變炸彈總數
+let TARGET_BOMBS = 15; 
+// ****************************************************************************
+// ****************************************************************************
+let minBombReplenishDelay = 150;
+let minBombReplenishCounter = 100;
 
 let gameOver = false;
 let win = false;
 let gameStarted = false;
+let gamePaused = false;
 
-let isProcessingFrame = false; 
+let isProcessingFrame = false;
 
-// 🛑 防線四：Web Worker 超時機制封裝
-let dtwWorker;
-let workerBusy = false;
-let dtwTimeout = null;
+// -----------------------
+// ONNX 模型辨識系統
+// -----------------------
+let ortSession = null;
+let labelMap = null;
+let predictionBuffer = [];
+const PREDICTION_BUFFER_SIZE = 5;   // 隊友規格：紀錄最近 5 次預測
+const STABLE_COUNT = 4;             // 隊友規格：5 次中至少 4 次一致
+const CONFIDENCE_THRESHOLD = 0.75;  // 隊友規格：原始 logit 門檻
+const MODEL_FRAMES = 30;
+const FEATURE_DIM = 138;
+let modelLoaded = false;
 
-function initWorker() {
-  dtwWorker = new Worker('dtw_worker.js');
-  
-  dtwWorker.onmessage = function (e) {
-    // 🛑 收到 Worker 訊息，安全拆除超時炸彈！
-    clearTimeout(dtwTimeout);
+// Debug: 儲存最近一次推論的完整結果供畫面顯示
+let lastDebugInfo = null;
 
-    const { type, words, match, score } = e.data;
-
-    if (type === 'GESTURES_LOADED') {
-      console.log('DTW Worker ready. Loaded words.');
-      fullVocabulary = e.data.vocab || [];
-      gesturesLoaded = true;
-      updateDifficultySelection();
-      return;
-    }
-
-    workerBusy = false;
-
-    if (gestureEl) {
-      if (match) {
-        gestureEl.textContent = `偵測: ${match} (得分: ${score.toFixed(1)})`;
-      } else {
-        gestureEl.textContent = `偵測: 最佳分數 ${score === Infinity ? '--' : score.toFixed(1)}`;
-      }
-    }
-
-    if (type === 'RESULT' && match && gameStarted && !gameOver) {
-      for (let b of bombs) {
-        if (b.word === match && !b.shrinking && !b.exploding) {
-          b.startShrink(false);
-          dtwCooldown = 25;
-          liveBuffer = [];
-          if (progressEl) progressEl.textContent = `進度: ✓ 辨識成功 (${match})`;
-          break;
-        }
-      }
-    }
-  };
-  
-  dtwWorker.postMessage({ type: 'LOAD_GESTURES' });
-}
-
-// 初始化啟動 Worker
-initWorker();
+// 詞彙難度對照表（可自由調整）
+const WORD_DIFFICULTY = {
+  '棒': 1, '謝謝': 1, '高興': 1, '喜歡': 1,
+  '名字': 2, '對不起': 2, '生氣': 2, '沒關係': 2,
+  '不客氣': 3, '飛機': 3,
+};
 
 let fullVocabulary = [];
-let currentVocabulary = [{ text: '載入中...', difficulty: 1 }]; 
+let currentVocabulary = [{ text: '載入中...', difficulty: 1 }];
 let gesturesLoaded = false;
 
 function updateDifficultySelection() {
   const diffSelect = document.getElementById('difficulty-select');
   const selectedDifficulty = diffSelect ? diffSelect.value : 'all';
-  
+
   if (selectedDifficulty === 'all') {
-    currentVocabulary = fullVocabulary.length > 0 ? [...fullVocabulary] : [{text: '無資料', difficulty: 1}];
+    currentVocabulary = fullVocabulary.length > 0 ? [...fullVocabulary] : [{ text: '無資料', difficulty: 1 }];
   } else {
     const diffInt = parseInt(selectedDifficulty, 10);
     const filtered = fullVocabulary.filter(v => v.difficulty === diffInt);
-    currentVocabulary = filtered.length > 0 ? filtered : (fullVocabulary.length > 0 ? [...fullVocabulary] : [{text: '無資料', difficulty: 1}]);
+    currentVocabulary = filtered.length > 0 ? filtered : (fullVocabulary.length > 0 ? [...fullVocabulary] : [{ text: '無資料', difficulty: 1 }]);
   }
 }
 
@@ -270,53 +234,85 @@ if (difficultySelect) {
   difficultySelect.addEventListener('change', updateDifficultySelection);
 }
 
-const backgroundImg = new Image(); backgroundImg.src = 'background.png';
-const houseImg = new Image(); houseImg.src = 'house.png';
-const planeImg = new Image(); planeImg.src = 'plane.png';
-const bombImg = new Image(); bombImg.src = 'bomb.png';
-const explosionImg = new Image(); explosionImg.src = 'explosion.png';
+async function initModel() {
+  try {
+    statusEl.textContent = '狀態: 正在載入 AI 模型...';
+    ortSession = await ort.InferenceSession.create('./tsl_model.onnx');
+    const response = await fetch('./10_label_map.json');
+    labelMap = await response.json();
+    console.log('ONNX model loaded', labelMap);
+
+    fullVocabulary = Object.entries(labelMap).map(([idx, text]) => ({
+      text,
+      difficulty: WORD_DIFFICULTY[text] || 1,
+    }));
+    currentVocabulary = [...fullVocabulary];
+    modelLoaded = true;
+    gesturesLoaded = true;
+    updateDifficultySelection();
+
+    // ****************************************************************************
+    // ****************************************************************************
+    // 💥 【音樂系統更動】：防呆避免蓋掉音樂解析狀態
+    if (!isAnalyzing) statusEl.textContent = '狀態: AI 模型載入完成';
+  } catch (e) {
+    console.error('Model init failed:', e);
+    statusEl.textContent = '狀態: AI 模型載入失敗 - ' + e.message;
+  }
+}
+
+// -----------------------
+// 圖片資源
+// -----------------------
+const backgroundImg = new Image();
+backgroundImg.src = 'background.png';
+
+const houseImg = new Image();
+houseImg.src = 'house.png';
+
+const planeImg = new Image();
+planeImg.src = 'plane.png';
+
+const bombImg = new Image();
+bombImg.src = 'bomb.png';
+
+const explosionImg = new Image();
+explosionImg.src = 'explosion.png';
 
 function randomVocab() {
   return currentVocabulary[Math.floor(Math.random() * currentVocabulary.length)];
 }
 
+// -----------------------
+// 飛機與炸彈
+// -----------------------
 class Plane {
   constructor() {
-    this.width = 120;
-    this.height = 50;
-    this.x = 0;
-    this.y = 50;
-    this.speed = 3;
-    this.direction = 1; 
+    this.width = 120; this.height = 50;
+    this.x = 0; this.y = 50;
+    this.speed = 3; this.direction = 1;
     this.dropCooldown = 150;
   }
-
   move() {
     this.x += this.speed * this.direction;
-    const videoAreaLeft = WIDTH - 260; 
-    if (this.x + this.width >= videoAreaLeft) {
-      this.x = videoAreaLeft - this.width;
-      this.direction = -1;
-    } else if (this.x <= 0) {
-      this.x = 0;
-      this.direction = 1;
-    }
+    // 飛機碰到右上角的攝像頭區域時回頭 (320×180 尺寸，位於右上角)
+    const cameraWidth = 320;
+    const videoAreaLeft = WIDTH - cameraWidth - 10;
+    if (this.x + this.width >= videoAreaLeft) { this.x = videoAreaLeft - this.width; this.direction = -1; }
+    else if (this.x <= 0) { this.x = 0; this.direction = 1; }
     if (this.dropCooldown > 0) this.dropCooldown -= 1;
   }
-
+    // ****************************************************************************
+    // delete maybeDropBomb()
+    // ****************************************************************************
   render(ctx) {
     if (planeImg.complete && planeImg.naturalWidth > 0) {
       const imgH = this.height;
       const imgW = (planeImg.naturalWidth / planeImg.naturalHeight) * imgH;
       const drawX = this.x + (this.width - imgW) / 2;
-      const drawY = this.y;
       ctx.save();
-      if (this.direction === -1) {
-        ctx.translate(drawX + imgW / 2, 0);
-        ctx.scale(-1, 1);
-        ctx.translate(-(drawX + imgW / 2), 0);
-      }
-      ctx.drawImage(planeImg, drawX, drawY, imgW, imgH);
+      if (this.direction === -1) { ctx.translate(drawX + imgW / 2, 0); ctx.scale(-1, 1); ctx.translate(-(drawX + imgW / 2), 0); }
+      ctx.drawImage(planeImg, drawX, this.y, imgW, imgH);
       ctx.restore();
     } else {
       ctx.fillStyle = '#999';
@@ -326,196 +322,244 @@ class Plane {
 }
 
 class Bomb {
-  static WIDTH = 100;
-  static HEIGHT = 100;
-  static SPEED = 1.2;
-  static MAX_SHRINK_TIME = 15;
-
-  constructor(x, y, targetTime) {
+  static WIDTH = 100; static HEIGHT = 100;
+  static SPEED = 1.5; static MAX_SHRINK_TIME = 15;
+// ****************************************************************************
+// ****************************************************************************
+// 【音樂對拍系統：為炸彈加入完美掉落時間參數】 + targetTime
+  constructor(x, y, targetTime) { 
     this.x = x ?? Math.random() * (WIDTH - Bomb.WIDTH);
     this.y = y ?? -Bomb.HEIGHT;
-    this.targetTime = targetTime;
+    // ****************************************************************************
+    // ****************************************************************************
+    this.targetTime = targetTime; // 🌟 為了誤差測量儲存目標時間
+    // ****************************************************************************
+    // ****************************************************************************
     this.word = randomVocab().text;
-    this.shrinking = false;
-    this.shrinkTimer = 0;
-    this.exploding = false;
-    this.explosionTimer = 0;
-    this.shouldExplode = false; 
-    this.finished = false;      
-    this.impactResolved = false; 
+    this.shrinking = false; this.shrinkTimer = 0;
+    this.exploding = false; this.explosionTimer = 0;
+    this.shouldExplode = false; this.finished = false; this.impactResolved = false;
+    this.houseDamageApplied = false;  // 標記房子傷害是否已應用
   }
-
-  fall() {
-    if (!this.shrinking && !this.exploding) {
-      this.y += Bomb.SPEED;
-    }
-  }
-
+  fall() { if (!this.shrinking && !this.exploding) this.y += Bomb.SPEED; }
   startShrink(shouldExplode = false) {
     if (this.exploding) return;
-    this.shrinking = true;
-    this.shrinkTimer = 0;
-    this.shouldExplode = shouldExplode;
-    this.impactResolved = true;
+    this.shrinking = true; this.shrinkTimer = 0;
+    this.shouldExplode = shouldExplode; this.impactResolved = true;
   }
-
   render(ctx) {
     if (this.finished) return;
-
-    let drawX = this.x; let drawY = this.y;
-    let drawW = Bomb.WIDTH; let drawH = Bomb.HEIGHT;
+    let drawX = this.x, drawY = this.y, drawW = Bomb.WIDTH, drawH = Bomb.HEIGHT;
 
     if (this.shrinking) {
       this.shrinkTimer += 1;
       const ratio = 1 - this.shrinkTimer / Bomb.MAX_SHRINK_TIME;
       if (ratio > 0) {
         drawW = Bomb.WIDTH * ratio; drawH = Bomb.HEIGHT * ratio;
-        const offsetX = (Bomb.WIDTH - drawW) / 2;
-        const offsetY = (Bomb.HEIGHT - drawH) / 2;
-        drawX = this.x + offsetX; drawY = this.y + offsetY;
+        drawX = this.x + (Bomb.WIDTH - drawW) / 2; drawY = this.y + (Bomb.HEIGHT - drawH) / 2;
       } else {
         this.shrinking = false;
-        if (this.shouldExplode) {
-          this.exploding = true;
-          this.explosionTimer = 0;
-        } else {
-          this.finished = true;
-        }
+        if (this.shouldExplode) { this.exploding = true; this.explosionTimer = 0; }
+        else { this.finished = true; }
       }
     }
-
     if (this.exploding) {
       this.explosionTimer += 1;
-      const maxExplosionFrames = 10; 
       const size = Bomb.WIDTH * 1.3;
-      const ex = this.x + (Bomb.WIDTH - size) / 2;
-      const ey = this.y + (Bomb.HEIGHT - size) / 2;
-
-      if (explosionImg.complete && explosionImg.naturalWidth > 0) {
-        ctx.drawImage(explosionImg, ex, ey, size, size);
-      } else {
-        ctx.fillStyle = 'orange';
-        ctx.beginPath();
-        ctx.arc(this.x + Bomb.WIDTH / 2, this.y + Bomb.HEIGHT / 2, size / 2, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      if (this.explosionTimer >= maxExplosionFrames) {
-        this.exploding = false;
-        this.finished = true;
-      }
+      const ex = this.x + (Bomb.WIDTH - size) / 2, ey = this.y + (Bomb.HEIGHT - size) / 2;
+      if (explosionImg.complete && explosionImg.naturalWidth > 0) ctx.drawImage(explosionImg, ex, ey, size, size);
+      else { ctx.fillStyle = 'orange'; ctx.beginPath(); ctx.arc(this.x + Bomb.WIDTH / 2, this.y + Bomb.HEIGHT / 2, size / 2, 0, Math.PI * 2); ctx.fill(); }
+      if (this.explosionTimer >= 10) { this.exploding = false; this.finished = true; }
       return;
     }
-
-    if (bombImg.complete && bombImg.naturalWidth > 0) {
-      ctx.drawImage(bombImg, drawX, drawY, drawW, drawH);
-    } else {
-      ctx.fillStyle = '#CC0000';
-      ctx.fillRect(drawX, drawY, drawW, drawH);
-    }
-
-    ctx.fillStyle = '#FFF';
-    ctx.font = '24px Arial';
-    ctx.textAlign = 'center';
-    const textOffsetX = 0;   
-    const textOffsetY = 10;  
-    ctx.fillText(this.word, this.x + Bomb.WIDTH / 2 + textOffsetX, this.y + Bomb.HEIGHT / 2 + textOffsetY);
+    if (bombImg.complete && bombImg.naturalWidth > 0) ctx.drawImage(bombImg, drawX, drawY, drawW, drawH);
+    else { ctx.fillStyle = '#CC0000'; ctx.fillRect(drawX, drawY, drawW, drawH); }
+    ctx.fillStyle = '#FFF'; ctx.font = '24px Arial'; ctx.textAlign = 'center';
+    ctx.fillText(this.word, this.x + Bomb.WIDTH / 2, this.y + Bomb.HEIGHT / 2 + 10);
   }
 }
 
+// -----------------------
+// 手勢偵測系統（ONNX 模型）
+// -----------------------
 let lastHandLandmarks = null;
 let lastVideoFrame = null;
-const LIVE_BUFFER_MAX = 45;
-const LIVE_BUFFER_REQUIRED = 20;
-let liveBuffer = [];
-let dtwCooldown = 0;
-let handWasPresent = false;  
+let handMissFrameCount = 0;  // 計數連續缺失的幀數
+const HAND_PERSISTENCE_FRAMES = 30;  // 手部節點持續顯示 30 幀（約 0.5 秒）後才清除
+
+let featureBuffer = [];
+const FEATURE_BUFFER_MAX = 30;
+const MIN_FRAMES_FOR_INFERENCE = 30;
+let inferenceCooldown = 0;
+let isInferring = false;
+let handMissCount = 0;
+let handWasPresent = false;
 
 function resetGestureSequence() {
-  liveBuffer = [];
-  dtwCooldown = 0;
-  workerBusy = false;
+  featureBuffer = [];
+  predictionBuffer = [];
+  inferenceCooldown = 0;
+  isInferring = false;
   handWasPresent = false;
+  handMissCount = 0;
+  handMissFrameCount = 0;  // 重置手部節點持久化計數
   if (progressEl) progressEl.textContent = '進度: 等待手勢...';
 }
 
-function getRawHandsFlat(results) {
-  let left_hand = null; let right_hand = null;
-  if (results.multiHandLandmarks && results.multiHandedness) {
-    for (let i = 0; i < results.multiHandedness.length; i++) {
-      const label = results.multiHandedness[i].label;
-      if (label === 'Left') left_hand = results.multiHandLandmarks[i];
-      if (label === 'Right') right_hand = results.multiHandLandmarks[i];
-    }
-  }
+async function runInference() {
+  if (!ortSession || isInferring || featureBuffer.length < MIN_FRAMES_FOR_INFERENCE) return null;
+  isInferring = true;
+  try {
+    const inputData = prepareModelInput(featureBuffer, MODEL_FRAMES);
+    const tensor = new ort.Tensor('float32', inputData, [1, MODEL_FRAMES, FEATURE_DIM]);
+    const results = await ortSession.run({ input: tensor });
+    const output = Array.from(results.output.data);
 
-  const numPoints = 42; 
-  const flat = new Float32Array(84); 
-  let idx = 0;
+    // 取得當前難度允許的詞彙清單
+    const activeWords = new Set(currentVocabulary.map(v => v.text));
 
-  function addHand(hand) {
-    if (!hand) {
-      for (let i = 0; i < 21; i++) { flat[idx++] = 0; flat[idx++] = 0; }
-      return;
+    // 建立 label index → word 對照，並遮蔽非當前難度的 logits
+    const maskedLogits = output.map((logit, i) => {
+      const word = labelMap[String(i)];
+      return activeWords.has(word) ? logit : -Infinity;
+    });
+
+    // 找最大 logit（只在允許的類別中）
+    const maxLogit = Math.max(...maskedLogits);
+    const predIdx = maskedLogits.indexOf(maxLogit);
+    const predLabel = labelMap[String(predIdx)];
+
+    // Debug: 記錄所有類別的原始 logits
+    const allPreds = [];
+    for (let i = 0; i < output.length; i++) {
+      const word = labelMap[String(i)] || `?${i}`;
+      const active = activeWords.has(word);
+      allPreds.push({ label: word, logit: output[i], active });
     }
-    for (const p of hand) {
-      flat[idx++] = p.x; flat[idx++] = p.y;
+    allPreds.sort((a, b) => b.logit - a.logit);
+    lastDebugInfo = {
+      top5: allPreds.filter(p => p.active).slice(0, 5).map(p => ({
+        label: p.label, prob: p.logit
+      })),
+      bufferLen: featureBuffer.length,
+      rawLogits: output.map(x => x.toFixed(2)),
+    };
+    const topActive = allPreds.filter(p => p.active).slice(0, 3);
+    console.log(`[推論] 緩衝=${featureBuffer.length}幀 | Top(該難度): ${topActive.map(p => `${p.label}(${p.logit.toFixed(2)})`).join(', ')}`);
+    
+    // 診斷: 所有logits都很低时的警告
+    const maxLogitAll = Math.max(...output);
+    if (maxLogitAll < 0.1) {
+      console.warn('[警告] 所有logits都很低 (<0.1)，检查:', {
+        buffer帧数: featureBuffer.length,
+        所有logits: output.map(x => x.toFixed(4)).join(','),
+      });
     }
+
+    isInferring = false;
+    // 使用原始 logit 值（不做 softmax），跟隊友的 checkGesture 一致
+    return { label: predLabel, confidence: maxLogit };
+  } catch (e) {
+    console.error('Inference error:', e);
+    isInferring = false;
+    return null;
   }
-  
-  addHand(left_hand); addHand(right_hand);
-  return flat;
 }
 
-function updateDynamicGesture(results) {
-  if (dtwCooldown > 0) dtwCooldown--;
+function processInferenceResult(result) {
+  if (!result) return;
+  if (gestureEl) gestureEl.textContent = `偵測: ${result.label} (logit: ${result.confidence.toFixed(2)})`;
 
-  const hasHand = results && results.multiHandLandmarks && results.multiHandLandmarks.length > 0;
-
-  if (!hasHand) {
-    if (handWasPresent && liveBuffer.length >= LIVE_BUFFER_REQUIRED && !workerBusy && dtwCooldown <= 0 && bombs.length > 0) {
-      const activeWords = Array.from(new Set(bombs.map(b => b.word)));
-      const liveFrames = liveBuffer.length;
-      const numPoints = 42;
-      const liveFlat = new Float32Array(liveFrames * numPoints * 2);
-      for (let f = 0; f < liveFrames; f++) {
-        liveFlat.set(liveBuffer[f], f * numPoints * 2);
-      }
-      
-      workerBusy = true;
-      
-      // 🛑 防線四：送出運算前，啟動 3 秒超時自毀裝置
-      clearTimeout(dtwTimeout);
-      dtwTimeout = setTimeout(() => {
-          console.warn("🛑 防呆：AI 運算超時！強制重置 Worker...");
-          dtwWorker.terminate(); // 殺掉卡死的舊員工
-          initWorker();          // 重新聘請新員工
-          workerBusy = false;
-          dtwCooldown = 0;
-          alert("手勢運算太複雜卡住了，已為您自動重新啟動 AI 引擎！");
-      }, 3000);
-
-      dtwWorker.postMessage(
-        { type: 'MATCH', data: { liveFlat, liveFrames, numPoints, activeWords, threshold: 40.0 } },
-        [liveFlat.buffer]
-      );
-    }
-    handWasPresent = false;
-    liveBuffer = []; 
-    if (progressEl && dtwCooldown <= 0) progressEl.textContent = '進度: 等待手勢...';
+  // 原始 logit 門檻 0.75（跟隊友的 checkGesture 一致）
+  if (result.confidence < CONFIDENCE_THRESHOLD) {
+    console.log(`[過濾] ${result.label} logit=${result.confidence.toFixed(2)} < 門檻 ${CONFIDENCE_THRESHOLD}`);
     return;
   }
 
-  handWasPresent = true;
-  const frame = getRawHandsFlat(results);
-  liveBuffer.push(frame);
-  if (liveBuffer.length > LIVE_BUFFER_MAX) liveBuffer.shift();
+  // 連續判定邏輯 (5 次中至少 4 次一致)
+  predictionBuffer.push(result.label);
+  if (predictionBuffer.length > PREDICTION_BUFFER_SIZE) predictionBuffer.shift();
 
-  if (progressEl) {
-    progressEl.textContent = `進度: 錄製動作 (${liveBuffer.length}/${LIVE_BUFFER_MAX})`;
+  const counts = {};
+  predictionBuffer.forEach(x => counts[x] = (counts[x] || 0) + 1);
+  const stableLabel = Object.keys(counts).find(key => counts[key] >= STABLE_COUNT);
+  console.log(`[緩衝] ${predictionBuffer.join(',')} | 穩定=${stableLabel || '無'}`);
+
+  if (stableLabel && gameStarted && !gameOver) {
+    for (let b of bombs) {
+      if (b.word === stableLabel && !b.shrinking && !b.exploding) {
+        console.log(`[成功] 消除炸彈: ${stableLabel}`);
+        b.startShrink(false);
+        inferenceCooldown = 30;
+        featureBuffer = [];
+        predictionBuffer = [];
+        if (progressEl) progressEl.textContent = `進度: 辨識成功 (${stableLabel})`;
+        break;
+      }
+    }
   }
 }
 
+function updateDynamicGesture(results) {
+  if (inferenceCooldown > 0) inferenceCooldown--;
+  const hasHand = results && (results.leftHandLandmarks || results.rightHandLandmarks);
+
+  if (!hasHand) {
+    handMissCount++;
+    handMissFrameCount++;  // 累加缺失幀數
+    // 只有在連續缺失超過設定幀數才清除手部節點
+    if (handMissFrameCount > HAND_PERSISTENCE_FRAMES) {
+      lastHandLandmarks = null;  // 只現在才真正清除
+      featureBuffer = [];
+    }
+    if (handMissCount < 5) return;
+    if (handWasPresent && featureBuffer.length >= MIN_FRAMES_FOR_INFERENCE &&
+      !isInferring && inferenceCooldown <= 0 && bombs.length > 0) {
+      runInference().then(r => processInferenceResult(r));
+    }
+    handWasPresent = false;
+    if (progressEl && inferenceCooldown <= 0) progressEl.textContent = '進度: 等待手勢...';
+    return;
+  }
+
+  // 檢測到手時重置計數
+  handMissCount = 0;
+  handMissFrameCount = 0;  // 重置缺失計數
+  handWasPresent = true;
+  
+  if (typeof extractFrame138 === 'function') {
+      const frame = extractFrame138(results);
+      
+      // 诊断：检查特征是否全为0或其他异常值
+      const nonZeroCount = frame.filter(v => Math.abs(v) > 1e-6).length;
+      if (featureBuffer.length === 0 && nonZeroCount < 10) {
+        console.warn('[特征提取] 非零值过少:', nonZeroCount, '个，特征可能有问题');
+        console.log('[特征样本]', {
+          leftHand: frame.slice(0, 9).map(x => x.toFixed(3)).join(','),
+          rightHand: frame.slice(63, 72).map(x => x.toFixed(3)).join(','),
+          global: frame.slice(126, 138).map(x => x.toFixed(3)).join(','),
+          诊断信息: typeof lastFeatureDiag !== 'undefined' ? lastFeatureDiag : '无',
+        });
+      }
+      
+      featureBuffer.push(frame);
+      if (featureBuffer.length > FEATURE_BUFFER_MAX) featureBuffer.shift();
+      if (progressEl) progressEl.textContent = `進度: 錄製動作 (${featureBuffer.length}/${FEATURE_BUFFER_MAX})`;
+
+      if (featureBuffer.length >= MIN_FRAMES_FOR_INFERENCE &&
+        !isInferring && inferenceCooldown <= 0 && bombs.length > 0) {
+        if (featureBuffer.length % 10 === 0 || featureBuffer.length >= FEATURE_BUFFER_MAX) {
+          runInference().then(r => processInferenceResult(r));
+        }
+      }
+  } else {
+      console.warn("找不到 extractFrame138 函數，請確保它在其他檔案或全域中定義。");
+  }
+}
+
+// -----------------------
+// 房子
+// -----------------------
 function initHouses() {
   houses = [];
   const attemptsLimit = 5000;
@@ -524,60 +568,212 @@ function initHouses() {
     const x = Math.random() * (WIDTH - HOUSE_WIDTH);
     const y = HEIGHT - HOUSE_HEIGHT - HOUSE_MARGIN_BOTTOM;
     const rect = { x, y, width: HOUSE_WIDTH, height: HOUSE_HEIGHT };
-
-    let overlapSameSpot = false;
-    for (const h of houses) {
-      const samePos = Math.abs(h.x - rect.x) < 1 && Math.abs(h.y - rect.y) < 1;
-      if (samePos) { overlapSameSpot = true; break; }
-    }
-    if (!overlapSameSpot) houses.push(rect);
-    attempts += 1;
+    let dup = false;
+    for (const h of houses) { if (Math.abs(h.x - rect.x) < 1 && Math.abs(h.y - rect.y) < 1) { dup = true; break; } }
+    if (!dup) houses.push(rect);
+    attempts++;
   }
-
   while (houses.length < HOUSE_COUNT) {
-    const x = 50 + houses.length * (HOUSE_WIDTH + 10);
-    const y = HEIGHT - HOUSE_HEIGHT - HOUSE_MARGIN_BOTTOM;
-    houses.push({ x, y, width: HOUSE_WIDTH, height: HOUSE_HEIGHT });
+    houses.push({ x: 50 + houses.length * (HOUSE_WIDTH + 10), y: HEIGHT - HOUSE_HEIGHT - HOUSE_MARGIN_BOTTOM, width: HOUSE_WIDTH, height: HOUSE_HEIGHT });
   }
 }
 
 function updateHud() {
   scoreEl.textContent = `房子數: ${houses.length}`;
-  lifeEl.textContent = `已掉落炸彈: ${totalBombsDropped}/${TARGET_BOMBS}`;
+  lifeEl.textContent = `已掉落: ${totalBombsDropped}/${TARGET_BOMBS}`;
 
+// ****************************************************************************
+// ***************************************
   if (isAnalyzing) {
     statusEl.textContent = '狀態: 🎵 音樂解析中，請稍候...';
   } else if (!gameStarted) {
     if (musicBeats.length > 0) {
-      statusEl.textContent = `狀態: ✅ 載入 ${TARGET_BOMBS} 顆炸彈 (按 Enter 開始)`;
+      statusEl.textContent = `狀態: ✅ 載入 ${TARGET_BOMBS} 顆炸彈 (按開始遊戲)`;
     } else {
-      statusEl.textContent = '狀態: 準備中 (請先在左上角上傳音樂)';
+      statusEl.textContent = modelLoaded ? '狀態: 準備中 (請先上傳音樂)' : '狀態: 正在載入模型...';
     }
-  } else if (!gameOver) {
-    statusEl.textContent = '狀態: 遊玩中';
-  } else if (win) {
-    statusEl.textContent = '狀態: 勝利！';
+// ***************************************
+// ****************************************************************************
+    
+    if (startBtn) {
+      startBtn.style.display = (modelLoaded && gesturesLoaded) ? 'block' : 'none';
+      startBtn.textContent = '開始遊戲';
+    }
+    if (pauseBtn) pauseBtn.style.display = 'none';
+  } else if (gameOver) {
+    statusEl.textContent = win ? '狀態: 勝利！' : '狀態: 失敗';
+    if (startBtn) {
+      startBtn.style.display = 'block';
+      startBtn.textContent = '重新開始';
+    }
+    if (pauseBtn) pauseBtn.style.display = 'none';
+  } else if (gamePaused) {
+    statusEl.textContent = '狀態: 暫停中';
+    if (startBtn) startBtn.style.display = 'none';
+    if (pauseBtn) {
+      pauseBtn.style.display = 'block';
+      pauseBtn.textContent = '繼續';
+    }
   } else {
-    statusEl.textContent = '狀態: 失敗';
+    statusEl.textContent = '狀態: 遊玩中';
+    if (startBtn) startBtn.style.display = 'none';
+    if (pauseBtn) {
+      pauseBtn.style.display = 'block';
+      pauseBtn.textContent = '暫停';
+    }
   }
 }
 
+// -----------------------
+// 繪製攝影機畫面與手部節點（所有狀態都顯示）
+// -----------------------
+let camVideoAspect = 16/9;  // 1280x720 的實際比例
+
+function renderCamera() {
+  // 計算正確的顯示尺寸（保持16:9比例）
+  const camMaxW = 320;  // 回復為 320 像素
+  const camMaxH = 180;
+  let camW = camMaxW;
+  let camH = camW / camVideoAspect;
+  if (camH > camMaxH) {
+    camH = camMaxH;
+    camW = camH * camVideoAspect;
+  }
+  // 放在右上角
+  const camX = WIDTH - camW - 10, camY = 10;
+
+  // 鏡像繪製攝影機畫面
+  if (lastVideoFrame) {
+    ctx.save();
+    ctx.translate(camX + camW, camY);
+    ctx.scale(-1, 1);
+    ctx.drawImage(lastVideoFrame, 0, 0, camW, camH);
+    ctx.restore();
+  }
+
+  // 綠色邊框
+  ctx.strokeStyle = '#0f0';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(camX, camY, camW, camH);
+
+  // 繪製手部節點（鏡像，使用實際顯示尺寸）
+  if (lastHandLandmarks && lastHandLandmarks.length > 0) {
+    ctx.fillStyle = '#0f0';
+    for (const hand of lastHandLandmarks) {
+      for (const lm of hand) {
+        const x = camX + (1 - lm.x) * camW;
+        const y = camY + lm.y * camH;
+        ctx.beginPath();
+        ctx.arc(x, y, 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+}
+
+// -----------------------
+// Debug 資訊疊加層（顯示模型推論 + 特徵診斷）
+// -----------------------
+// 儲存最近一次的特徵診斷
+let lastFeatureDiag = null;
+
+function renderDebugOverlay() {
+  const x = 10, y = HEIGHT - 320;
+  ctx.fillStyle = 'rgba(0,0,0,0.75)';
+  ctx.fillRect(x, y, 420, 310);
+  ctx.fillStyle = '#0f0';
+  ctx.font = '13px monospace';
+  ctx.textAlign = 'left';
+
+  let ly = y + 18;
+  ctx.fillText(`[Buffer] ${featureBuffer.length}/${FEATURE_BUFFER_MAX} | [Hand] ${handWasPresent ? 'YES' : 'NO'} | [CD] ${inferenceCooldown}`, x + 8, ly);
+  ly += 18;
+  ctx.fillText(`[Smooth] ${predictionBuffer.join(',') || '(空)'} (需${STABLE_COUNT}/${PREDICTION_BUFFER_SIZE}次)`, x + 8, ly);
+
+  // 特徵診斷區
+  ly += 22;
+  ctx.fillStyle = '#0ff';
+  ctx.fillText('=== 特徵診斷 ===', x + 8, ly);
+  if (lastFeatureDiag) {
+    const d = lastFeatureDiag;
+    ly += 16;
+    ctx.fillStyle = d.hasPose ? '#0f0' : '#f00';
+    ctx.fillText(`Pose: ${d.hasPose ? '✓' : '✗'}`, x + 8, ly);
+    ctx.fillStyle = d.hasFace ? '#0f0' : '#f00';
+    ctx.fillText(`Face: ${d.hasFace ? '✓' : '✗'}`, x + 80, ly);
+    ctx.fillStyle = d.hasLeft ? '#0f0' : '#f88';
+    ctx.fillText(`左手: ${d.hasLeft ? '✓' : '✗'}`, x + 150, ly);
+    ctx.fillStyle = d.hasRight ? '#0f0' : '#f88';
+    ctx.fillText(`右手: ${d.hasRight ? '✓' : '✗'}`, x + 230, ly);
+    ly += 16;
+    ctx.fillStyle = '#888';
+    ctx.font = '11px monospace';
+    ctx.fillText(`零值 L:${d.lhZeros}/63 R:${d.rhZeros}/63`, x + 8, ly);
+  } else {
+    ly += 16;
+    ctx.fillStyle = '#888';
+    ctx.fillText('等待偵測...', x + 8, ly);
+    ly += 32;
+  }
+
+  // 模型預測區
+  ly += 16;
+  if (lastDebugInfo) {
+    ctx.fillStyle = '#ff0';
+    ctx.font = '13px monospace';
+    ctx.fillText(`=== 預測 (門檻${CONFIDENCE_THRESHOLD}) ===`, x + 8, ly);
+    lastDebugInfo.top5.slice(0, 3).forEach((p, i) => {
+      ly += 16;
+      const barW = Math.max(0, (p.prob + 3) * 20);
+      ctx.fillStyle = (i === 0 && p.prob >= CONFIDENCE_THRESHOLD) ? '#0f0' : '#555';
+      ctx.fillRect(x + 140, ly - 12, barW, 12);
+      ctx.fillStyle = '#fff';
+      ctx.fillText(`${p.label}: ${p.prob.toFixed(1)}`, x + 8, ly);
+    });
+    ly += 12;
+    ctx.fillStyle = '#666';
+    ctx.font = '10px monospace';
+    ctx.fillText(`logits: ${lastDebugInfo.rawLogits.join(',')}`, x + 8, ly);
+  } else {
+    ctx.fillStyle = '#888';
+    ctx.fillText('尚未進行推論', x + 8, ly);
+  }
+}
+
+// -----------------------
+// 主迴圈
+// -----------------------
 function gameLoop() {
+  // 继续计数手部被检测到的时间，确保每帧都更新（即使 predictWebcam 延迟）
+  if (handMissFrameCount > 0) {
+    handMissFrameCount++;
+    if (handMissFrameCount > HAND_PERSISTENCE_FRAMES) {
+      lastHandLandmarks = null;
+    }
+  }
+
   ctx.clearRect(0, 0, WIDTH, HEIGHT);
 
   if (!gameStarted) {
-    if (backgroundImg.complete && backgroundImg.naturalWidth > 0) {
-      ctx.drawImage(backgroundImg, 0, 0, WIDTH, HEIGHT);
-    } else {
-      ctx.fillStyle = '#003366'; ctx.fillRect(0, 0, WIDTH, HEIGHT);
-    }
+    if (backgroundImg.complete && backgroundImg.naturalWidth > 0) ctx.drawImage(backgroundImg, 0, 0, WIDTH, HEIGHT);
+    else { ctx.fillStyle = '#003366'; ctx.fillRect(0, 0, WIDTH, HEIGHT); }
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+    // ★ 遊戲開始前也顯示攝影機 + 手部節點
+    renderCamera();
+    renderDebugOverlay();
+
     ctx.fillStyle = '#FFF'; ctx.font = '48px Arial'; ctx.textAlign = 'center';
-    if (!gesturesLoaded) {
-      ctx.fillText('正在載入詞彙，請稍候...', WIDTH / 2, Math.max(HEIGHT / 2, 50));
-    } else {
-      ctx.fillText('按 Enter 鍵開始遊戲', WIDTH / 2, Math.max(HEIGHT / 2, 50));
+    if (!gesturesLoaded || !modelLoaded) {
+      ctx.fillText('正在載入模型，請稍候...', WIDTH / 2, Math.max(HEIGHT / 2, 50));
+    // ****************************************************************************
+    // ***************************************
+    } else if (musicBeats.length === 0) {
+      // 💥 【音樂系統提示】
+      ctx.fillText('請先在左上角上傳音樂', WIDTH / 2, Math.max(HEIGHT / 2, 50));
+    // ***************************************
+    // ****************************************************************************
     }
     updateHud();
     requestAnimationFrame(gameLoop);
@@ -586,49 +782,26 @@ function gameLoop() {
 
   frameCounter += 1;
 
-  if (backgroundImg.complete && backgroundImg.naturalWidth > 0) {
-    ctx.drawImage(backgroundImg, 0, 0, WIDTH, HEIGHT);
-  } else {
-    ctx.fillStyle = '#003366'; ctx.fillRect(0, 0, WIDTH, HEIGHT);
-  }
+  if (backgroundImg.complete && backgroundImg.naturalWidth > 0) ctx.drawImage(backgroundImg, 0, 0, WIDTH, HEIGHT);
+  else { ctx.fillStyle = '#003366'; ctx.fillRect(0, 0, WIDTH, HEIGHT); }
 
-  const camX = WIDTH - 260; const camY = 10;
-  const camW = 240; const camH = 180;
+  // ★ 遊戲中也顯示攝影機 + 手部節點
+  renderCamera();
 
-  if (lastVideoFrame) {
-    ctx.save();
-    ctx.translate(camX + camW, camY); ctx.scale(-1, 1);
-    ctx.drawImage(lastVideoFrame, 0, 0, camW, camH);
-    ctx.restore();
-  }
-
-  ctx.strokeStyle = '#0f0'; ctx.lineWidth = 2;
-  ctx.strokeRect(camX, camY, camW, camH);
-
-  if (lastHandLandmarks && lastHandLandmarks.length > 0) {
-    ctx.fillStyle = '#0f0';
-    for (const hand of lastHandLandmarks) {
-      for (const lm of hand) {
-        const xNorm = 1 - lm.x; 
-        const x = camX + xNorm * camW;
-        const y = camY + lm.y * camH;
-        ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
-      }
-    }
-  }
-
-  if (!gameOver) {
+  if (!gameOver && !gamePaused) {
     plane.move();
 
-    if (gameStarted) {
-      let currentTime = bgmPlayer.currentTime + AUDIO_OFFSET;
-      let dropDistance = HEIGHT - HOUSE_HEIGHT - 150; 
-      let travelTime = dropDistance / (Bomb.SPEED * 60); 
-      let lookAheadTime = currentTime + travelTime;
+    // ****************************************************************************
+    // ***************************************
+    // 【音樂對拍系統：未來視精準掉落邏輯】
+    let currentTime = bgmPlayer.currentTime + AUDIO_OFFSET; 
+    let dropDistance = HEIGHT - HOUSE_HEIGHT - 150; 
+    let travelTime = dropDistance / (Bomb.SPEED * 60); 
+    let lookAheadTime = currentTime + travelTime;
 
-      while (currentBeatIndex < musicBeats.length && lookAheadTime >= musicBeats[currentBeatIndex].time) {
+    while (currentBeatIndex < musicBeats.length && lookAheadTime >= musicBeats[currentBeatIndex].time) {
         let targetLane = musicBeats[currentBeatIndex].lane;
-        let usableWidth = WIDTH - 260; 
+        let usableWidth = WIDTH - 320; 
         let laneX = (usableWidth / 3) * targetLane + (usableWidth / 6) - (Bomb.WIDTH / 2);
 
         plane.x = laneX; 
@@ -639,183 +812,282 @@ function gameLoop() {
         let offsetY = Math.max(0, timeOverdue * (Bomb.SPEED * 60));
         
         const dropY = plane.y + plane.height - 30 + offsetY;
-        bombs.push(new Bomb(laneX, dropY, targetTime));
+        bombs.push(new Bomb(laneX, dropY, targetTime)); 
         
         totalBombsDropped += 1;
         currentBeatIndex += 1; 
-      }
-    }
+    } 
+    //【音樂掉落系統結束】
+    // ***************************************
+    // ****************************************************************************
   }
 
-  ctx.fillStyle = '#ffaa00';
+  // 房子
   for (const h of houses) {
-    if (houseImg.complete && houseImg.naturalWidth > 0) {
-      ctx.drawImage(houseImg, h.x, h.y, h.width, h.height);
-    } else {
-      ctx.fillRect(h.x, h.y, h.width, h.height);
-    }
+    if (houseImg.complete && houseImg.naturalWidth > 0) ctx.drawImage(houseImg, h.x, h.y, h.width, h.height);
+    else { ctx.fillStyle = '#ffaa00'; ctx.fillRect(h.x, h.y, h.width, h.height); }
   }
 
+  // 炸彈
   if (!gameOver) {
     for (let i = bombs.length - 1; i >= 0; i--) {
       const b = bombs[i];
-      b.fall();
+      if (!gamePaused) b.fall();
       b.render(ctx);
-
       const bombBottom = b.y + Bomb.HEIGHT;
-      let hitAnyHouse = false;
-
-      for (let hi = 0; hi < houses.length; hi++) {
-        const h = houses[hi];
-        const collideX = b.x < h.x + h.width && b.x + Bomb.WIDTH > h.x;
-        const collideY = b.y < h.y + h.height && bombBottom > h.y;
-        if (collideX && collideY) {
-          hitAnyHouse = true; break;
+      // 只有碰到地面才爆炸，忽略房子碰撞
+      const hitGround = bombBottom >= HEIGHT;
+      
+      if (!b.impactResolved && !b.shrinking && !b.exploding && hitGround) {
+        
+        // ****************************************************************************
+        // ***************************************
+        // 【我的音樂對拍系統：150ms 誤差測量雷達】
+        if (b.targetTime !== undefined) {
+            let error = Math.abs((bgmPlayer.currentTime + AUDIO_OFFSET) - b.targetTime);
+            console.log(`[誤差測試] 目標: ${b.targetTime.toFixed(3)}s | 實際(含校正): ${(bgmPlayer.currentTime + AUDIO_OFFSET).toFixed(3)}s | 誤差: ${error.toFixed(3)} 秒`);
         }
+        // ***************************************
+        // ****************************************************************************
+
+        b.impactResolved = true;  // 標記已接觸
+        b.shouldExplode = true;
+        b.startShrink(true);  // 開始爆炸縮小動畫
       }
 
-      if (!b.impactResolved && !b.shrinking && !b.exploding && (hitAnyHouse || bombBottom >= HEIGHT)) {
-        let error = Math.abs(bgmPlayer.currentTime - b.targetTime);
-        console.log(`[誤差測試] 目標: ${b.targetTime.toFixed(3)}s | 實際: ${bgmPlayer.currentTime.toFixed(3)}s | 誤差: ${error.toFixed(3)} 秒`);
-        b.startShrink(true);
+      // 爆炸動畫完成後再消除最近的房子
+      if (b.finished && b.shouldExplode && !b.houseDamageApplied) {
+        b.houseDamageApplied = true;
         if (houses.length > 0) {
-          const idx = Math.floor(Math.random() * houses.length);
-          houses.splice(idx, 1);
-          if (houses.length === 0) {
-            gameOver = true; win = false;
+          // 找到距離炸弹爆炸點最近的房子
+          let closestIdx = 0;
+          let closestDist = Infinity;
+          const bombCenterX = b.x + Bomb.WIDTH / 2;
+          const bombCenterY = b.y + Bomb.HEIGHT / 2;
+          for (let i = 0; i < houses.length; i++) {
+            const h = houses[i];
+            const houseCenterX = h.x + h.width / 2;
+            const houseCenterY = h.y + h.height / 2;
+            const dist = Math.hypot(houseCenterX - bombCenterX, houseCenterY - bombCenterY);
+            if (dist < closestDist) {
+              closestDist = dist;
+              closestIdx = i;
+            }
           }
+          houses.splice(closestIdx, 1);
+          if (houses.length === 0) { gameOver = true; win = false; }
         }
       }
-
-      if (!b.shrinking && !b.exploding && (b.finished || b.shrinkTimer > Bomb.MAX_SHRINK_TIME)) {
-        bombs.splice(i, 1);
-      }
+      if (!b.shrinking && !b.exploding && (b.finished || b.shrinkTimer > Bomb.MAX_SHRINK_TIME)) bombs.splice(i, 1);
     }
-
-    if (!gameOver && totalBombsDropped >= TARGET_BOMBS && bombs.length === 0 && houses.length > 0) {
-      gameOver = true; win = true;
-    }
+    if (!gameOver && totalBombsDropped >= TARGET_BOMBS && bombs.length === 0 && houses.length > 0) { gameOver = true; win = true; }
   } else {
     ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 0, WIDTH, HEIGHT);
-    ctx.fillStyle = win ? '#00ff00' : '#ff0000';
-    ctx.font = '48px Arial'; ctx.textAlign = 'center';
+    ctx.fillStyle = win ? '#00ff00' : '#ff0000'; ctx.font = '48px Arial'; ctx.textAlign = 'center';
     ctx.fillText(win ? '勝利！' : '失敗', WIDTH / 2, HEIGHT / 2 - 20);
-    ctx.fillStyle = '#FFF'; ctx.font = '32px Arial';
-    ctx.fillText('按 Enter 鍵重新開始', WIDTH / 2, HEIGHT / 2 + 40);
+  }
+
+  // 顯示暫停畫面
+  if (gamePaused) {
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+    ctx.fillStyle = '#FFF'; ctx.font = '60px Arial'; ctx.textAlign = 'center';
+    ctx.fillText('暫停', WIDTH / 2, HEIGHT / 2 - 40);
   }
 
   plane.render(ctx);
+  renderDebugOverlay();
   updateHud();
   requestAnimationFrame(gameLoop);
 }
 
+// -----------------------
+// MediaPipe Hand 引擎 (Tasks Vision API)
+// -----------------------
+let handLandmarker = null;
+let lastVideoTime = -1;
+
 async function initWebcam() {
-  if (!window.Hands || !window.Camera) {
-    statusEl.textContent = '狀態: 無法載入 MediaPipe Hands（仍可遊玩）';
-    return;
-  }
+  statusEl.textContent = '狀態: 正在載入 Tasks Vision 引擎...';
 
-  statusEl.textContent = '狀態: 正在載入 AI 引擎...';
-
-  const hands = new window.Hands({
-    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
-  });
-
-  hands.setOptions({
-    maxNumHands: 2,
-    modelComplexity: 1,
-    minDetectionConfidence: 0.5,
-    minTrackingConfidence: 0.5,
-  });
-
-  hands.onResults((results) => {
-    if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-      lastHandLandmarks = results.multiHandLandmarks; 
-      if (gameStarted && !gameOver) updateDynamicGesture(results);
-    } else {
-      lastHandLandmarks = null;
-      if (gameStarted && !gameOver) updateDynamicGesture(null);
-    }
-    if (results.image) lastVideoFrame = results.image;
-    isProcessingFrame = false;
-  });
-
-  const camera = new window.Camera(video, {
-    onFrame: async () => {
-      if (isProcessingFrame) return;
-      isProcessingFrame = true;
-      try {
-        await hands.send({ image: video });
-      } catch (err) {
-        console.error("Hands process error:", err);
-        isProcessingFrame = false;
-      }
-    },
-    width: 640,
-    height: 480,
-  });
-
-  // 🛑 防線三：使用 Try-Catch 攔截攝影機權限與硬體錯誤
   try {
-    await camera.start();
+    // 使用 ES Module Dynamic Import 載入 @mediapipe/tasks-vision
+    const visionModule = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs");
+    const { FilesetResolver: FR, HandLandmarker: HL } = visionModule;
+
+    statusEl.textContent = '狀態: 正在載入 Hand 模型...';
+
+    const filesetResolver = await FR.forVisionTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm"
+    );
+
+    handLandmarker = await HL.createFromOptions(filesetResolver, {
+      baseOptions: {
+        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task",
+        delegate: "GPU"
+      },
+      runningMode: "VIDEO",
+      numHands: 2,  // 同時檢測二隻手
+      minHandDetectionConfidence: 0.5,
+      minHandPresenceConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
+
+    console.log("[Hand] HandLandmarker 建立成功 (Tasks Vision API)");
+
+    // 開啟攝影機 (要求 16:9 以匹配訓練影片的比例，避免特徵變形)
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: 1280, height: 720 }
+    });
+    video.srcObject = stream;
+    await video.play();
+    lastVideoFrame = video;
     statusEl.textContent = '狀態: 已連線攝像頭（可進行手勢偵測）';
+    predictWebcam();
+
   } catch (error) {
-    console.error("攝影機啟動失敗:", error);
-    if (error.name === 'NotAllowedError' || error.message.includes('Permission')) {
-        alert("你拒絕了攝影機權限喔！請在網址列旁邊點擊鎖頭圖示解鎖攝影機，然後重新整理網頁。");
-    } else if (error.name === 'NotFoundError' || error.message.includes('Device not found')) {
-        alert("找不到攝影機！請確認你的電腦有連接視訊鏡頭。");
-    } else {
-        alert("攝影機啟動失敗，請確認沒有其他程式 (如 Zoom) 正在佔用攝影機。");
-    }
-    statusEl.textContent = '狀態: 無法存取攝影機（仍可遊玩）';
+    console.error("Hand initialization failed:", error);
+    statusEl.textContent = '狀態: Hand 載入失敗 - ' + error.message;
   }
 }
 
+let lastPredictTime = 0;
+const PREDICT_FRAME_INTERVAL = 33;  // 30 FPS (改善手部同步)
+async function predictWebcam() {
+  if (!handLandmarker) return;
+
+  // 確認影片播放中
+  if (video.currentTime === lastVideoTime) {
+    requestAnimationFrame(predictWebcam);
+    return;
+  }
+
+  // 限制推論幀率約 30 FPS (每 33ms 執行一次) 改善手部節點同步
+  const now = performance.now();
+  if (now - lastPredictTime < PREDICT_FRAME_INTERVAL) {
+    requestAnimationFrame(predictWebcam);
+    return;
+  }
+
+  lastPredictTime = now;
+  lastVideoTime = video.currentTime;
+
+  try {
+    const startTimeMs = performance.now();
+    const results = handLandmarker.detectForVideo(video, startTimeMs);
+
+    // Hand Landmarker 返回的是一個或兩個手的書蹟
+    let leftHandLandmarks = null;
+    let rightHandLandmarks = null;
+    
+    if (results.landmarks && results.landmarks.length > 0) {
+      if (results.handedness && results.handedness.length > 0) {
+        // 根據 handedness 的位置區分左手和右手
+        for (let i = 0; i < results.landmarks.length; i++) {
+          const handedness = results.handedness[i][0].categoryName; // 'Left' or 'Right'
+          if (handedness === 'Left') {
+            leftHandLandmarks = results.landmarks[i];
+          } else if (handedness === 'Right') {
+            rightHandLandmarks = results.landmarks[i];
+          }
+        }
+      }
+    }
+
+    // 格式轉換以相容舊的 results 格式 (用於除錯顯示與特徵提取)
+    const formattedResults = {
+      poseLandmarks: null,  // Hand Landmarker 不會返回體態
+      faceLandmarks: null,  // Hand Landmarker 不會返回臉部
+      leftHandLandmarks: leftHandLandmarks,
+      rightHandLandmarks: rightHandLandmarks,
+    };
+    
+    // 诊断：检查HandLandmarker返回的数据格式
+    if (results.landmarks && results.landmarks.length > 0) {
+      const sampleLm = results.landmarks[0];
+      if (sampleLm && sampleLm.length > 0) {
+        const firstPoint = sampleLm[0];
+        if (typeof firstPoint.x !== 'number' || typeof firstPoint.y !== 'number') {
+          console.warn('[警告] HandLandmarker格式异常:', {
+            firstPoint: firstPoint,
+            keys: Object.keys(firstPoint),
+          });
+        }
+      }
+    }
+
+    const handList = [];
+    if (formattedResults.leftHandLandmarks) handList.push(formattedResults.leftHandLandmarks);
+    if (formattedResults.rightHandLandmarks) handList.push(formattedResults.rightHandLandmarks);
+    lastHandLandmarks = handList.length > 0 ? handList : null;
+
+    updateDynamicGesture(formattedResults);
+    lastVideoFrame = video;
+  } catch (e) {
+    console.error("Detection error:", e);
+  }
+
+  requestAnimationFrame(predictWebcam);
+}
+
+// -----------------------
+// 初始化
+// -----------------------
 function initGame() {
   initHouses();
   plane = new Plane();
 
-  window.addEventListener('keydown', (e) => {
-    if (e.code === 'Enter') {
-      e.preventDefault();
+  // 移除鍵盤事件，改用按鈕
 
+  // 開始遊戲按鈕
+  if (startBtn) {
+    startBtn.addEventListener('click', () => {
+
+    // ****************************************************************************
+    // ***************************************
+    // 【我的音樂對拍系統：防呆控制與播放連動】
       if (musicBeats.length === 0 || isAnalyzing) {
         alert("請先上傳音樂並等待解析完成喔！");
         return; 
       }
 
       if (!gameStarted) {
-        if (!gesturesLoaded) return; 
+        if (!gesturesLoaded || !modelLoaded) return;
         gameStarted = true;
-        bgmPlayer.play(); 
+        gamePaused = false;
+        bgmPlayer.play(); // 🌟 音樂連動：播放*********************************
+        updateHud();
       } else if (gameOver) {
-        gameStarted = true;
-        gameOver = false;
-        win = false;
-        bombs = [];
-        totalBombsDropped = 0;
-        initHouses();
-        plane = new Plane();
+        gameStarted = true; gameOver = false; win = false; gamePaused = false;
+        bombs = []; totalBombsDropped = 0; currentBeatIndex = 0;
+        initHouses(); plane = new Plane();
         resetGestureSequence();
-        currentBeatIndex = 0;
-        bgmPlayer.currentTime = 0;
-        bgmPlayer.play();
+        bgmPlayer.currentTime = 0; // 🌟 音樂連動：歸零***********************
+        bgmPlayer.play();          // 🌟 音樂連動：播放***********************
+        updateHud();
       }
-    }
+    });
+  }
 
-    if (e.code === 'Space' && !gameOver && gameStarted) {
-      if (bombs.length > 0) {
-        bombs[0].startShrink(false);
+  // 暫停按鈕
+  if (pauseBtn) {
+    pauseBtn.addEventListener('click', () => {
+      if (gameStarted && !gameOver) {
+        gamePaused = !gamePaused;
+        if (gamePaused) {
+            bgmPlayer.pause(); // 🌟 音樂連動：暫停音樂***************************
+        } else {
+            bgmPlayer.play();  // 🌟 音樂連動：恢復音樂***************************
+        }
+        updateHud();
       }
-    }
-  });
+    });
+  }
 
   updateHud();
   requestAnimationFrame(gameLoop);
 }
 
-initWebcam().catch(() => {
-  statusEl.textContent = '狀態: 無法存取攝影機（仍可遊玩）';
-});
+initModel();
+initWebcam().catch(() => { statusEl.textContent = '狀態: 無法存取攝影機（仍可遊玩）'; });
 initGame();
