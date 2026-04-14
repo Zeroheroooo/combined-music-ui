@@ -805,34 +805,53 @@ function renderDebugOverlay() {
 // ********************************************************************************
 //*****************************************
 // 🎮 遊戲結束處理函數
+// ==========================================
+// 🎮 遊戲結束處理函數 (加強版)
+// ==========================================
 function handleGameOver(isWin) {
-    // 1. 停止背景音樂
-    const bgm = document.getElementById('bgmPlayer');
-    if (bgm) {
-        bgm.pause();
-        bgm.currentTime = 0; // 把音樂切回開頭
+    console.log("🚨 成功觸發結算函數！準備停止音樂與上傳分數..."); // 加入這行用來偵錯
+
+    // 1. 停止背景音樂 (雙管齊下)
+    try {
+        // 方法 A: 如果你是用 HTML <audio> 標籤
+        const bgm = document.getElementById('bgmPlayer');
+        if (bgm && !bgm.paused) {
+            bgm.pause();
+            bgm.currentTime = 0;
+        }
+
+        // 方法 B: 如果你是用 Web Audio API (例如 source.start())
+        // 假設你的變數叫做 source 或 audioSource，請根據你的程式碼解除下面這行的註解並改名
+        // if (audioSource) audioSource.stop(); 
+        
+    } catch (e) {
+        console.log("音樂停止失敗，但沒關係繼續結算：", e);
     }
 
-    // 2. 計算最後分數 (你可以依據你的變數來修改，例如用擊落炸彈數)
-    // 這裡示範：勝利算房子剩餘數 * 100，失敗就給個安慰獎 10 分
-    const finalScore = isWin ? (houses.length * 100) : 10; 
+    // 2. 計算最後分數 (這裡請換成你遊戲中真正的變數，例如 hitCount 或 score)
+    // 假設有一個變數叫 currentScore 記錄玩家得分
+    const finalScore = isWin ? 9999 : 10; // 👈 這裡請換成你真實的分數變數
     
-    // 3. 延遲一小段時間再跳出視窗，讓玩家有時間看到畫面上的「失敗/勝利」字樣
+    // 3. 延遲一小段時間再跳出視窗
     setTimeout(() => {
         const message = isWin ? "🎉 恭喜過關！" : "💥 遊戲失敗！";
-        const playerName = prompt(`${message} 你的分數是 ${finalScore}，請輸入大名登入排行榜：`, "神秘玩家") || "神秘玩家";
+        const playerName = prompt(`${message} 你的分數是 ${finalScore}，請輸入大名登入排行榜：`, "神秘玩家");
         
-        // 4. 上傳分數並抓取排行榜
-        saveScoreToCloud(playerName, finalScore).then(() => {
-            getTop10Scores().then(top10 => {
-                console.log("=== 🌍 全球前 10 名排行榜 ===");
-                top10.forEach((player, index) => {
-                    console.log(`第 ${index + 1} 名: ${player.name} - ${player.score} 分`);
+        // 如果玩家按取消或沒輸入，就不上傳
+        if (playerName) {
+            console.log(`準備上傳 -> 玩家: ${playerName}, 分數: ${finalScore}`);
+            saveScoreToCloud(playerName, finalScore).then(() => {
+                getTop10Scores().then(top10 => {
+                    console.log("=== 🌍 全球前 10 名排行榜 ===");
+                    top10.forEach((player, index) => {
+                        console.log(`第 ${index + 1} 名: ${player.name} - ${player.score} 分`);
+                    });
                 });
-                alert("分數已上傳！請看 Console 檢查排行榜 (未來會做成 UI)");
             });
-        });
-    }, 500); // 延遲 0.5 秒跳出視窗
+        } else {
+            console.log("玩家取消輸入名字，不上傳分數。");
+        }
+    }, 500);
 }
 //******************************************
 //***************************************************************************************
@@ -971,7 +990,7 @@ function gameLoop() {
             }
           }
           houses.splice(closestIdx, 1);
-          if (houses.length === 0) { gameOver = true; win = false; }
+          if (houses.length === 0) { gameOver = true; win = false; handleGameOver(false); }
         }
       }
       if (!b.shrinking && !b.exploding && (b.finished || b.shrinkTimer > Bomb.MAX_SHRINK_TIME)) bombs.splice(i, 1);
@@ -982,13 +1001,6 @@ function gameLoop() {
         win = true; 
         handleGameOver(true); // 呼叫結算函數，傳入 true 代表勝利
     }
-    // 💥 判定失敗的條件 (例如房子死光了)
-    if (!gameOver && houses.length <= 0) {
-        gameOver = true;
-        win = false;
-        handleGameOver(false); // 呼叫結算函數，傳入 false 代表失敗
-    }
-    
   } else {
     ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 0, WIDTH, HEIGHT);
     ctx.fillStyle = win ? '#00ff00' : '#ff0000'; ctx.font = '48px Arial'; ctx.textAlign = 'center';
