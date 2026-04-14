@@ -808,44 +808,68 @@ function renderDebugOverlay() {
 // ==========================================
 // 🎮 遊戲結束處理函數 (加強版)
 // ==========================================
+// ==========================================
+// 🎮 遊戲結束處理函數 (加強版 + 華麗排行榜 UI)
+// ==========================================
 function handleGameOver(isWin) {
-    console.log("🚨 成功觸發結算函數！準備停止音樂與上傳分數..."); // 加入這行用來偵錯
+    console.log("🚨 成功觸發結算函數！準備停止音樂與上傳分數..."); 
 
-    // 1. 停止背景音樂 (雙管齊下)
+    // 1. 停止背景音樂
     try {
-        // 方法 A: 如果你是用 HTML <audio> 標籤
         const bgm = document.getElementById('bgmPlayer');
         if (bgm && !bgm.paused) {
             bgm.pause();
             bgm.currentTime = 0;
         }
-
-        // 方法 B: 如果你是用 Web Audio API (例如 source.start())
-        // 假設你的變數叫做 source 或 audioSource，請根據你的程式碼解除下面這行的註解並改名
-        // if (audioSource) audioSource.stop(); 
-        
     } catch (e) {
         console.log("音樂停止失敗，但沒關係繼續結算：", e);
     }
 
-    // 2. 計算最後分數 (這裡請換成你遊戲中真正的變數，例如 hitCount 或 score)
-    // 假設有一個變數叫 currentScore 記錄玩家得分
-    const finalScore = isWin ? 9999 : 10; // 👈 這裡請換成你真實的分數變數
+    // 2. 計算最後分數
+    const finalScore = isWin ? 9999 : 10; // 👈 這裡記得換成你真正的分數變數喔！
     
-    // 3. 延遲一小段時間再跳出視窗
+    // 3. 延遲 0.5 秒後跳出輸入名字視窗
     setTimeout(() => {
         const message = isWin ? "🎉 恭喜過關！" : "💥 遊戲失敗！";
         const playerName = prompt(`${message} 你的分數是 ${finalScore}，請輸入大名登入排行榜：`, "神秘玩家");
         
-        // 如果玩家按取消或沒輸入，就不上傳
+        // 4. 如果有輸入名字，就上傳並顯示華麗排行榜
         if (playerName) {
             console.log(`準備上傳 -> 玩家: ${playerName}, 分數: ${finalScore}`);
+            
+            // 呼叫 Firebase 上傳分數
             saveScoreToCloud(playerName, finalScore).then(() => {
+                
+                // 上傳完畢後，抓取最新前 10 名
                 getTop10Scores().then(top10 => {
-                    console.log("=== 🌍 全球前 10 名排行榜 ===");
+                    
+                    // --- 👇 這裡就是把 Console 變成畫面的魔法 👇 ---
+                    const modal = document.getElementById('leaderboard-modal');
+                    const listContainer = document.getElementById('leaderboard-list');
+                    listContainer.innerHTML = ''; // 先清空舊名單
+                    
+                    // 跑迴圈把前 10 名塞進 HTML 裡
                     top10.forEach((player, index) => {
-                        console.log(`第 ${index + 1} 名: ${player.name} - ${player.score} 分`);
+                        // 給前三名加個超炫獎牌
+                        let medal = '';
+                        if (index === 0) medal = '🥇';
+                        else if (index === 1) medal = '🥈';
+                        else if (index === 2) medal = '🥉';
+                        else medal = `<span style="display:inline-block; width:25px;">${index + 1}.</span>`;
+
+                        // 塞入 HTML 條目
+                        listContainer.innerHTML += `
+                            <li style="display: flex; justify-content: space-between; padding: 10px 5px; border-bottom: 1px dashed #444; font-size: 18px;">
+                                <span style="font-weight: bold;">${medal} ${player.name}</span>
+                                <span style="color: #ff0;">${player.score} 分</span>
+                            </li>
+                        `;
                     });
+
+                    // 把隱藏的排行榜視窗顯示出來 (flex 可以讓它置中)
+                    modal.style.display = 'flex';
+                    // --- 👆 魔法結束 👆 ---
+
                 });
             });
         } else {
@@ -1203,6 +1227,20 @@ function initGame() {
       }
     });
   }
+
+  //**************************
+  //********
+  const closeBoardBtn = document.getElementById('close-leaderboard-btn');
+  if (closeBoardBtn) {
+      closeBoardBtn.addEventListener('click', () => {
+          // 隱藏排行榜
+          document.getElementById('leaderboard-modal').style.display = 'none';
+          // 觸發重新開始的邏輯
+          if (startBtn) startBtn.click(); 
+      });
+  }
+  //********
+  //**************************
 
   updateHud();
   requestAnimationFrame(gameLoop);
