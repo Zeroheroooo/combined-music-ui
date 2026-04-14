@@ -1,6 +1,10 @@
 // app.js: 台灣手語學習遊戲 Web 版
 // 使用 ONNX Transformer 模型進行手語辨識
 
+// 綁定到 window 上，方便我們在 Console 直接手動呼叫測試
+window.testUpload = saveScoreToCloud;
+window.testGet = getTop10Scores;
+
 //****************************************************
 //*************************
 // ☁️ Firebase 排行榜系統初始化 (升級至 12.12.0 最新版)
