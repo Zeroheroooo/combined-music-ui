@@ -802,6 +802,40 @@ function renderDebugOverlay() {
   }
 }
 
+// ********************************************************************************
+//*****************************************
+// 🎮 遊戲結束處理函數
+function handleGameOver(isWin) {
+    // 1. 停止背景音樂
+    const bgm = document.getElementById('bgmPlayer');
+    if (bgm) {
+        bgm.pause();
+        bgm.currentTime = 0; // 把音樂切回開頭
+    }
+
+    // 2. 計算最後分數 (你可以依據你的變數來修改，例如用擊落炸彈數)
+    // 這裡示範：勝利算房子剩餘數 * 100，失敗就給個安慰獎 10 分
+    const finalScore = isWin ? (houses.length * 100) : 10; 
+    
+    // 3. 延遲一小段時間再跳出視窗，讓玩家有時間看到畫面上的「失敗/勝利」字樣
+    setTimeout(() => {
+        const message = isWin ? "🎉 恭喜過關！" : "💥 遊戲失敗！";
+        const playerName = prompt(`${message} 你的分數是 ${finalScore}，請輸入大名登入排行榜：`, "神秘玩家") || "神秘玩家";
+        
+        // 4. 上傳分數並抓取排行榜
+        saveScoreToCloud(playerName, finalScore).then(() => {
+            getTop10Scores().then(top10 => {
+                console.log("=== 🌍 全球前 10 名排行榜 ===");
+                top10.forEach((player, index) => {
+                    console.log(`第 ${index + 1} 名: ${player.name} - ${player.score} 分`);
+                });
+                alert("分數已上傳！請看 Console 檢查排行榜 (未來會做成 UI)");
+            });
+        });
+    }, 500); // 延遲 0.5 秒跳出視窗
+}
+//******************************************
+//***************************************************************************************
 // -----------------------
 // 主迴圈
 // -----------------------
@@ -942,27 +976,19 @@ function gameLoop() {
       }
       if (!b.shrinking && !b.exploding && (b.finished || b.shrinkTimer > Bomb.MAX_SHRINK_TIME)) bombs.splice(i, 1);
     }
-    if (!gameOver && totalBombsDropped >= TARGET_BOMBS && bombs.length === 0 && houses.length > 0) {
-      gameOver = true;
-      win = true;
-      // 🏆 遊戲勝利！上傳分數！
-      // 這裡我先用「剩下的房子數 * 100」當作分數範例，你可以自己改成想要的計分機制
-      const finalScore = houses.length * 100;
-      
-      // 彈出視窗讓玩家輸入名字 (簡易寫法)
-      const playerName = prompt(`恭喜勝利！你的分數是 ${finalScore}，請輸入你的大名：`, "神秘玩家") || "神秘玩家";
-      
-      // 呼叫 Firebase 上傳
-      saveScoreToCloud(playerName, finalScore).then(() => {
-          // 上傳完畢後，抓取並在 Console 印出最新的前 10 名
-          getTop10Scores().then(top10 => {
-              console.log("=== 🌍 全球前 10 名排行榜 ===");
-              top10.forEach((player, index) => {
-                  console.log(`第 ${index + 1} 名: ${player.name} - ${player.score} 分`);
-              });
-          });
-      });
+    // 🏆 判定勝利的條件
+    if (!gameOver && totalBombsDropped >= TARGET_BOMBS && bombs.length === 0 && houses.length > 0) { 
+        gameOver = true; 
+        win = true; 
+        handleGameOver(true); // 呼叫結算函數，傳入 true 代表勝利
     }
+    // 💥 判定失敗的條件 (例如房子死光了)
+    if (!gameOver && houses.length <= 0) {
+        gameOver = true;
+        win = false;
+        handleGameOver(false); // 呼叫結算函數，傳入 false 代表失敗
+    }
+    
   } else {
     ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 0, WIDTH, HEIGHT);
     ctx.fillStyle = win ? '#00ff00' : '#ff0000'; ctx.font = '48px Arial'; ctx.textAlign = 'center';
