@@ -10,9 +10,9 @@ window.testGet = getTop10Scores;
 // ☁️ Firebase 排行榜系統初始化 (升級至 12.12.0 最新版)
 
 // 1. 核心大腦 (12.12.0 版)
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
 // 2. 雲端資料庫 (12.12.0 版) - 這是我們為了排行榜自己加上去的！
-import { getFirestore, collection, addDoc, getDocs, query, orderBy, limit, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, getDocs, query, orderBy, limit, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
 // 3. 你的專屬金鑰
 const firebaseConfig = {
