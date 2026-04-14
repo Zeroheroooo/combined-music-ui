@@ -1,6 +1,64 @@
 // app.js: 台灣手語學習遊戲 Web 版
 // 使用 ONNX Transformer 模型進行手語辨識
 
+//****************************************************
+//*************************
+// ☁️ Firebase 排行榜系統初始化 (升級至 12.12.0 最新版)
+
+// 1. 核心大腦 (12.12.0 版)
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js";
+// 2. 雲端資料庫 (12.12.0 版) - 這是我們為了排行榜自己加上去的！
+import { getFirestore, collection, addDoc, getDocs, query, orderBy, limit, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
+
+// 3. 你的專屬金鑰
+const firebaseConfig = {
+  apiKey: "AIzaSyCPcZUYi5Q47iE3UpXaM4Zkw90RtD61-tk",
+  authDomain: "tsl-rhythm-game.firebaseapp.com",
+  projectId: "tsl-rhythm-game",
+  storageBucket: "tsl-rhythm-game.firebasestorage.app",
+  messagingSenderId: "837614444705",
+  appId: "1:837614444705:web:4e11bd9f0b1e7b987dd0e0",
+  measurementId: "G-XGHRTP4C43"
+};
+
+// 4. 啟動 Firebase 與資料庫
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+// ==========================================
+// 📌 功能一：上傳分數到雲端
+export async function saveScoreToCloud(playerName, finalScore) {
+    try {
+        await addDoc(collection(db, "leaderboard"), {
+            name: playerName,
+            score: finalScore,
+            timestamp: serverTimestamp()
+        });
+        console.log("分數上傳成功！");
+    } catch (e) {
+        console.error("上傳分數失敗: ", e);
+    }
+}
+
+// 📌 功能二：抓取全球前 10 名
+export async function getTop10Scores() {
+    try {
+        const q = query(collection(db, "leaderboard"), orderBy("score", "desc"), limit(10));
+        const querySnapshot = await getDocs(q);
+        
+        let leaderboardData = [];
+        querySnapshot.forEach((doc) => {
+            leaderboardData.push(doc.data());
+        });
+        return leaderboardData;
+    } catch (e) {
+        console.error("抓取排行榜失敗: ", e);
+        return [];
+    }
+}
+//*************************
+//****************************************************
+
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 const statusEl = document.getElementById('status');
@@ -880,7 +938,27 @@ function gameLoop() {
       }
       if (!b.shrinking && !b.exploding && (b.finished || b.shrinkTimer > Bomb.MAX_SHRINK_TIME)) bombs.splice(i, 1);
     }
-    if (!gameOver && totalBombsDropped >= TARGET_BOMBS && bombs.length === 0 && houses.length > 0) { gameOver = true; win = true; }
+    if (!gameOver && totalBombsDropped >= TARGET_BOMBS && bombs.length === 0 && houses.length > 0) {
+      gameOver = true;
+      win = true;
+      // 🏆 遊戲勝利！上傳分數！
+      // 這裡我先用「剩下的房子數 * 100」當作分數範例，你可以自己改成想要的計分機制
+      const finalScore = houses.length * 100;
+      
+      // 彈出視窗讓玩家輸入名字 (簡易寫法)
+      const playerName = prompt(`恭喜勝利！你的分數是 ${finalScore}，請輸入你的大名：`, "神秘玩家") || "神秘玩家";
+      
+      // 呼叫 Firebase 上傳
+      saveScoreToCloud(playerName, finalScore).then(() => {
+          // 上傳完畢後，抓取並在 Console 印出最新的前 10 名
+          getTop10Scores().then(top10 => {
+              console.log("=== 🌍 全球前 10 名排行榜 ===");
+              top10.forEach((player, index) => {
+                  console.log(`第 ${index + 1} 名: ${player.name} - ${player.score} 分`);
+              });
+          });
+      });
+    }
   } else {
     ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 0, WIDTH, HEIGHT);
     ctx.fillStyle = win ? '#00ff00' : '#ff0000'; ctx.font = '48px Arial'; ctx.textAlign = 'center';
