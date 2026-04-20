@@ -392,9 +392,11 @@ class Bomb {
   constructor(x, y, targetTime) { 
     this.x = x ?? Math.random() * (WIDTH - Bomb.WIDTH);
     this.y = y ?? -Bomb.HEIGHT;
+    this.y = this.startY;//0420 
     // ****************************************************************************
     // ****************************************************************************
     this.targetTime = targetTime; // 🌟 為了誤差測量儲存目標時間
+    this.spawnTime = spawnTime;//0420
     // ****************************************************************************
     // ****************************************************************************
     this.word = randomVocab().text;
@@ -403,7 +405,17 @@ class Bomb {
     this.shouldExplode = false; this.finished = false; this.impactResolved = false;
     this.houseDamageApplied = false;  // 標記房子傷害是否已應用
   }
-  fall() { if (!this.shrinking && !this.exploding) this.y += Bomb.SPEED; }
+  // ****************************************************************************
+  // ***************************************
+  fall(currentTime) {
+    if (!this.shrinking && !this.exploding){
+      // 絕對時間同步公式：經過的時間 * 每秒應掉落的像素 (SPEED * 60幀)
+        const elapsedTime = currentTime - this.spawnTime;
+        this.y = this.startY + elapsedTime * (Bomb.SPEED * 60);
+    }
+  }
+  // ***************************************
+  // ****************************************************************************
   startShrink(shouldExplode = false) {
     if (this.exploding) return;
     this.shrinking = true; this.shrinkTimer = 0;
@@ -951,7 +963,7 @@ function gameLoop() {
         let offsetY = Math.max(0, timeOverdue * (Bomb.SPEED * 60));
         
         const dropY = plane.y + plane.height - 30 + offsetY;
-        bombs.push(new Bomb(laneX, dropY, targetTime)); 
+        bombs.push(new Bomb(laneX, dropY, targetTime, spawnTime)); //0420
         
         totalBombsDropped += 1;
         currentBeatIndex += 1; 
@@ -971,7 +983,7 @@ function gameLoop() {
   if (!gameOver) {
     for (let i = bombs.length - 1; i >= 0; i--) {
       const b = bombs[i];
-      if (!gamePaused) b.fall();
+      if (!gamePaused) b.fall(bgmPlayer.currentTime + AUDIO_OFFSET);//0420
       b.render(ctx);
       const bombBottom = b.y + Bomb.HEIGHT;
       // 只有碰到地面才爆炸，忽略房子碰撞
