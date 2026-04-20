@@ -974,24 +974,25 @@ function gameLoop() {
     let travelTime = dropDistance / (Bomb.SPEED * 60); 
     let lookAheadTime = currentTime + travelTime;
 
+    // 只要時間到了，就把對應的炸彈全部生出來
     while (currentBeatIndex < musicBeats.length && lookAheadTime >= musicBeats[currentBeatIndex].time) {
         let targetLane = musicBeats[currentBeatIndex].lane;
         let usableWidth = WIDTH - 320; 
         let laneX = (usableWidth / 3) * targetLane + (usableWidth / 6) - (Bomb.WIDTH / 2);
-
-        //plane.x = laneX; 
         
         let targetTime = musicBeats[currentBeatIndex].time;
         let spawnTime = targetTime - travelTime;
-        let timeOverdue = currentTime - spawnTime;
-        let offsetY = Math.max(0, timeOverdue * (Bomb.SPEED * 60));
         
-        const dropY = plane.y + plane.height - 30 + offsetY;
-        bombs.push(new Bomb(laneX, dropY, targetTime, spawnTime)); //0420
+        // 🌟 修正重點：把 offsetY 拔掉！直接計算飛機肚子底下的「原始起點高度」
+        // 後續的絕對位置，交給 Bomb.fall() 自己去算就好！
+        const baseY = plane.y + plane.height - 30; 
+        
+        // 生成炸彈 (給它純粹的 baseY)
+        bombs.push(new Bomb(laneX, baseY, targetTime, spawnTime)); 
         
         totalBombsDropped += 1;
         currentBeatIndex += 1; 
-    } 
+    }
     //【音樂掉落系統結束】
     // ***************************************
     // ****************************************************************************
@@ -1019,9 +1020,18 @@ function gameLoop() {
         // ***************************************
         // 【我的音樂對拍系統：150ms 誤差測量雷達】
         if (b.targetTime !== undefined) {
-            let error = Math.abs((bgmPlayer.currentTime + AUDIO_OFFSET) - b.targetTime);
-            console.log(`[誤差測試] 目標: ${b.targetTime.toFixed(3)}s | 實際(含校正): ${(bgmPlayer.currentTime + AUDIO_OFFSET).toFixed(3)}s | 誤差: ${error.toFixed(3)} 秒`);
-        }
+              // 取得炸彈碰到地面瞬間的「真實音樂時間」
+              let currentRealTime = bgmPlayer.currentTime + AUDIO_OFFSET;
+              // 計算誤差 (絕對值)
+              let error = Math.abs(currentRealTime - b.targetTime);
+              
+              // 印出華麗的報表，如果有大於 0.5 秒的就亮紅燈，不然就亮綠燈
+              if (error > 0.5) {
+                  console.log(`🔴 [嚴重延遲] 目標: ${b.targetTime.toFixed(3)}s | 實際: ${currentRealTime.toFixed(3)}s | 誤差: ${error.toFixed(3)} 秒`);
+              } else {
+                  console.log(`🟢 [完美對拍] 目標: ${b.targetTime.toFixed(3)}s | 實際: ${currentRealTime.toFixed(3)}s | 誤差: ${error.toFixed(3)} 秒`);
+              }
+          }
         // ***************************************
         // ****************************************************************************
 
