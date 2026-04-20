@@ -400,7 +400,7 @@ class Bomb {
 // ****************************************************************************
 // ****************************************************************************
 // 【音樂對拍系統：為炸彈加入完美掉落時間參數】 + targetTime
-  constructor(x, y, targetTime) { 
+  constructor(x, y, targetTime, spawnTime) { 
     this.x = x ?? Math.random() * (WIDTH - Bomb.WIDTH);
     this.y = y ?? -Bomb.HEIGHT;
     this.y = this.startY;//0420 
