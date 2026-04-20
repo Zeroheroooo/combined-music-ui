@@ -970,7 +970,10 @@ function gameLoop() {
     // ***************************************
     // 【音樂對拍系統：未來視精準掉落邏輯】
     let currentTime = bgmPlayer.currentTime + AUDIO_OFFSET; 
-    let dropDistance = HEIGHT - HOUSE_HEIGHT - 150; 
+    // 🌟 修正重點：精準計算真實的起點(飛機肚子)與終點(地板)距離0420
+    const baseY = plane.y + plane.height - 30; // 炸彈起點 (70)
+    let dropDistance = HEIGHT - Bomb.HEIGHT - baseY; // 真實掉落距離 (630)
+    
     let travelTime = dropDistance / (Bomb.SPEED * 60); 
     let lookAheadTime = currentTime + travelTime;
 
@@ -982,10 +985,6 @@ function gameLoop() {
         
         let targetTime = musicBeats[currentBeatIndex].time;
         let spawnTime = targetTime - travelTime;
-        
-        // 🌟 修正重點：把 offsetY 拔掉！直接計算飛機肚子底下的「原始起點高度」
-        // 後續的絕對位置，交給 Bomb.fall() 自己去算就好！
-        const baseY = plane.y + plane.height - 30; 
         
         // 生成炸彈 (給它純粹的 baseY)
         bombs.push(new Bomb(laneX, baseY, targetTime, spawnTime)); 
