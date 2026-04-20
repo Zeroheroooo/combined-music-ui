@@ -352,18 +352,29 @@ class Plane {
   constructor() {
     this.width = 120; this.height = 50;
     this.x = 0; this.y = 50;
+    this.targetX = 0;//0420🌟 新增：飛機心裡想著的目標位置
     this.speed = 3; this.direction = 1;
     this.dropCooldown = 150;
   }
+  //---------------------------------------------------------------------------------------------------
+  //---------------------------------------------------
+  //改成平滑飛行版
   move() {
-    this.x += this.speed * this.direction;
-    // 飛機碰到右上角的攝像頭區域時回頭 (320×180 尺寸，位於右上角)
-    const cameraWidth = 320;
-    const videoAreaLeft = WIDTH - cameraWidth - 10;
-    if (this.x + this.width >= videoAreaLeft) { this.x = videoAreaLeft - this.width; this.direction = -1; }
-    else if (this.x <= 0) { this.x = 0; this.direction = 1; }
-    if (this.dropCooldown > 0) this.dropCooldown -= 1;
+    // 🌟 核心魔法：線性插值 (Lerp) 平滑移動
+    // 飛機會每一幀朝著目標拉近距離。0.1 是「滑順係數」，數字越小越滑順，數字越大越敏捷。
+    this.x += (this.targetX - this.x) * 0.1;
+
+    // 🌟 附加優化：自動轉頭
+    // 判斷目標在左邊還右邊，自動把飛機的圖片方向轉過去
+    if (this.targetX > this.x + 5) {
+        this.direction = 1;  // 朝右
+    } else if (this.targetX < this.x - 5) {
+        this.direction = -1; // 朝左
+    }
   }
+  //---------------------------------------------------
+  //---------------------------------------------------------------------------------------------------
+  
     // ****************************************************************************
     // delete maybeDropBomb()
     // ****************************************************************************
@@ -942,6 +953,19 @@ function gameLoop() {
   if (!gameOver && !gamePaused) {
     plane.move();
 
+    //-------------------------------------------------------------------------------------------------0420
+    //-------------------------------------------------------
+    // 🌟 新增：讓飛機「預知未來」，提早朝著下一個炸彈的跑道飛過去
+    if (currentBeatIndex < musicBeats.length) {
+        let nextBeat = musicBeats[currentBeatIndex];
+        let usableWidth = WIDTH - 320; 
+        let nextLaneX = (usableWidth / 3) * nextBeat.lane + (usableWidth / 6) - (Bomb.WIDTH / 2);
+        
+        // 告訴飛機下一個目的地在哪
+        plane.targetX = nextLaneX; 
+    }
+    //--------------------------------------------------------
+    //--------------------------------------------------------------------------------------------------0420
     // ****************************************************************************
     // ***************************************
     // 【音樂對拍系統：未來視精準掉落邏輯】
@@ -955,7 +979,7 @@ function gameLoop() {
         let usableWidth = WIDTH - 320; 
         let laneX = (usableWidth / 3) * targetLane + (usableWidth / 6) - (Bomb.WIDTH / 2);
 
-        plane.x = laneX; 
+        //plane.x = laneX; 
         
         let targetTime = musicBeats[currentBeatIndex].time;
         let spawnTime = targetTime - travelTime;
