@@ -223,6 +223,7 @@ async function analyzeBeatsSmartJS(audioBuffer) {
 // 遊戲狀態
 // -----------------------
 let score = 0;
+let hitCount = 0; // 🌟 新增這行：用來記錄成功消除的炸彈數量
 let bombs = [];
 let frameCounter = 0;
 
@@ -578,6 +579,7 @@ function processInferenceResult(result) {
       if (b.word === stableLabel && !b.shrinking && !b.exploding) {
         console.log(`[成功] 消除炸彈: ${stableLabel}`);
         b.startShrink(false);
+        hitCount++; // 🌟 新增這行：擊落數 +1
         inferenceCooldown = 30;
         featureBuffer = [];
         predictionBuffer = [];
@@ -852,7 +854,8 @@ function handleGameOver(isWin) {
     }
 
     // 2. 計算最後分數
-    const finalScore = isWin ? 9999 : 10; // 👈 這裡記得換成你真正的分數變數喔！
+    // 🌟 修正重點：每成功消除一顆炸彈 +100 分，每剩餘一棟房子 +500 分
+    const finalScore = (hitCount * 100) + (houses.length * 500);
     
     // 3. 延遲 0.5 秒後跳出輸入名字視窗
     setTimeout(() => {
@@ -1239,6 +1242,7 @@ function initGame() {
       } else if (gameOver) {
         gameStarted = true; gameOver = false; win = false; gamePaused = false;
         bombs = []; totalBombsDropped = 0; currentBeatIndex = 0;
+        hitCount = 0; // 🌟 新增這行：重新開始時擊落數歸零
         initHouses(); plane = new Plane();
         resetGestureSequence();
         bgmPlayer.currentTime = 0; // 🌟 音樂連動：歸零***********************
