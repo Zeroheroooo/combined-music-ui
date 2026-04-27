@@ -18,6 +18,7 @@
             display: block;
             width: 100vw;
             height: 100vh;
+            z-index: 0;
         }
 
         #ui {
@@ -70,6 +71,16 @@
             background: #00dd00;
         }
 
+        .btn:disabled {
+            background: #666666;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .btn:disabled:hover {
+            background: #666666;
+        }
+
         .btn-pause {
             background: #ff6600;
         }
@@ -85,8 +96,9 @@
             width: 320px;
             height: 180px;
             border: 2px solid #0f0;
-            z-index: 1;
-            opacity: 0;
+            z-index: 100;
+            opacity: 1;
+            display: block;
         }
     </style>
 </head>
@@ -109,11 +121,11 @@
             </button>
         </div>
 
-        <div style="pointer-events: auto; background: rgba(0,0,0,0.5); padding: 8px; border-radius: 4px; border: 1px dashed #0f0; width: 100%; box-sizing: border-box; margin-top: 5px;">
+        <div style="pointer-events: auto; background: rgba(0,0,0,0.5); padding: 8px; border-radius: 4px; border: 1px dashed #0f0; width: 250px; box-sizing: border-box; margin-top: 5px;">
             <label for="audioUpload" style="font-size: 14px; font-weight: bold; cursor: pointer; color: #0f0; display: block; margin-bottom: 4px;">
-                🎵 第一步：點此上傳音樂 (必須)
+                🎵 點此上傳音樂
             </label>
-            <input type="file" id="audioUpload" accept="audio/mp3, audio/wav, audio/ogg" style="width: 100%; font-size: 12px; color: #fff;">
+            <input type="file" id="audioUpload" accept="audio/*, audio/mp3, audio/wav, audio/mpeg, .mp3, .wav, .m4a, .aac">
             <audio id="bgmPlayer" style="display: none;"></audio>
         </div>
         <p id="status">狀態: 準備中</p>
