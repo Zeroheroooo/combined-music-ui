@@ -11,7 +11,7 @@ window.testGet = getTop10Scores;
 
 // 1. 核心大腦 (12.12.0 版)
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-// 2. 雲端資料庫 (12.12.0 版) - 這是我們為了排行榜自己加上去的！
+// 2. 雲端資料庫 (12.12.0 版) - 包含 getCountFromServer 和 where
 import { getFirestore, collection, addDoc, getDocs, query, orderBy, limit, serverTimestamp, getCountFromServer, where } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
 // 3. 你的專屬金鑰
@@ -71,12 +71,13 @@ const lifeEl = document.getElementById('life');
 const video = document.getElementById('video');
 const gestureEl = document.getElementById('gesture');
 const progressEl = document.getElementById('progress');
+
 // 🌟 新增的 UI 變數
 const musicSelectionUI = document.getElementById('musicSelectionUI');
 const defaultMusicBtn = document.getElementById('defaultMusicBtn');
 const parsingStatus = document.getElementById('parsingStatus');
 const actionBtn = document.getElementById('actionBtn');
-// (原本的 audioUpload 應該還在，確保有這行：const audioUpload = document.getElementById('audioUpload');)
+const audioUpload = document.getElementById('audioUpload');
 
 let WIDTH = 600;
 let HEIGHT = 800;
@@ -90,18 +91,15 @@ function resizeCanvasToWindow() {
 window.addEventListener('resize', resizeCanvasToWindow);
 resizeCanvasToWindow();
 
-
-// ****************************************************************************
 // ****************************************************************************
 // 🎵🎵🎵🎵🎵 【音樂對拍系統：變數宣告與檔案防呆解析】 🎵🎵🎵🎵🎵
 let musicBeats = [];
 let currentBeatIndex = 0;
 let isAnalyzing = false;
-const AUDIO_OFFSET = 0.08; // 🌟 為了教授要求的 <150ms 誤差校正值
+const AUDIO_OFFSET = 0.08; // 為了教授要求的 <150ms 誤差校正值
 const bgmPlayer = document.getElementById('bgmPlayer');
-const audioUpload = document.getElementById('audioUpload');
 
-// 🌟 統一的音樂解析與啟動函式
+// 🌟 統一的音樂解析與啟動函式 (手機完美相容版)
 async function processAudioData(arrayBuffer, sourceURL) {
     isAnalyzing = true;
     if (parsingStatus) parsingStatus.textContent = '🎵 音樂解析中，請稍候...';
@@ -109,9 +107,13 @@ async function processAudioData(arrayBuffer, sourceURL) {
     
     try {
         bgmPlayer.src = sourceURL;
-        
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+        
+        // 🍏 iOS Safari 救星：使用傳統 Callback 包裝成 Promise，避免手機解析崩潰
+        const audioBuffer = await new Promise((resolve, reject) => {
+            audioCtx.decodeAudioData(arrayBuffer, resolve, reject);
+        });
+
         musicBeats = await analyzeBeatsSmartJS(audioBuffer);
         
         if (parsingStatus) parsingStatus.textContent = `✅ 解析完成！載入 ${TARGET_BOMBS} 顆炸彈`;
@@ -120,11 +122,22 @@ async function processAudioData(arrayBuffer, sourceURL) {
         // 延遲 0.8 秒關閉黑色選單，讓使用者看到「完成」的狀態
         setTimeout(() => {
             if (musicSelectionUI) musicSelectionUI.style.display = 'none';
-            // 顯示畫面正中間的「開始遊戲」按鈕
-            if (actionBtn && modelLoaded && gesturesLoaded) {
+            
+            // 🚨 防呆機制：不管 AI 模型載好了沒，都先把主控按鈕顯示出來
+            if (actionBtn) {
                 actionBtn.style.display = 'block';
                 actionBtn.className = 'center-state';
-                actionBtn.textContent = '開始遊戲';
+                
+                // 如果模型還沒載完，按鈕變灰色並顯示「載入中」
+                if (!modelLoaded || !gesturesLoaded) {
+                    actionBtn.textContent = 'AI 模型載入中...';
+                    actionBtn.style.backgroundColor = '#999';
+                    actionBtn.disabled = true;
+                } else {
+                    actionBtn.textContent = '開始遊戲';
+                    actionBtn.style.backgroundColor = '#0f0';
+                    actionBtn.disabled = false;
+                }
             }
         }, 800);
 
@@ -151,7 +164,7 @@ if (audioUpload) {
             e.target.value = ''; return; 
         }
 
-        if (defaultMusicBtn) defaultMusicBtn.disabled = true; // 鎖定預設按鈕
+        if (defaultMusicBtn) defaultMusicBtn.disabled = true;
         audioUpload.disabled = true;
         
         const arrayBuffer = await file.arrayBuffer();
@@ -167,7 +180,6 @@ if (defaultMusicBtn) {
         if (audioUpload) audioUpload.disabled = true; 
         
         try {
-            // 讀取專案資料夾內的 default_track.mp3
             const response = await fetch('./default_track.mp3');
             if (!response.ok) throw new Error("找不到檔案");
             const arrayBuffer = await response.arrayBuffer();
@@ -180,12 +192,14 @@ if (defaultMusicBtn) {
     });
 }
 
-
-
 async function analyzeBeatsSmartJS(audioBuffer) {
     const duration = audioBuffer.duration;
     const sampleRate = audioBuffer.sampleRate;
-    const offlineCtx = new OfflineAudioContext(3, audioBuffer.length, sampleRate);
+    
+    // 🍏 iOS Safari 救星：支援舊版蘋果音訊引擎
+    const OfflineCtxConstructor = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    const offlineCtx = new OfflineCtxConstructor(3, audioBuffer.length, sampleRate);
+    
     const source = offlineCtx.createBufferSource();
     source.buffer = audioBuffer;
 
@@ -262,14 +276,12 @@ async function analyzeBeatsSmartJS(audioBuffer) {
 }
 // 🎵🎵🎵🎵🎵 【音樂對拍系統：解析引擎結束】 🎵🎵🎵🎵🎵
 // ****************************************************************************
-// ****************************************************************************
-
 
 // -----------------------
 // 遊戲狀態
 // -----------------------
 let score = 0;
-let hitCount = 0; // 🌟 新增這行：用來記錄成功消除的炸彈數量
+let hitCount = 0; // 用來記錄成功消除的炸彈數量
 let bombs = [];
 let frameCounter = 0;
 
@@ -282,12 +294,8 @@ let houses = [];
 let plane = null;
 let totalBombsDropped = 0;
 const MIN_ACTIVE_BOMBS = 2;
-// ****************************************************************************
-// ****************************************************************************
-// 💥 【音樂系統更動】：把 const 改成了 let，因為音樂會動態改變炸彈總數
 let TARGET_BOMBS = 15; 
-// ****************************************************************************
-// ****************************************************************************
+
 let minBombReplenishDelay = 150;
 let minBombReplenishCounter = 100;
 
@@ -295,7 +303,6 @@ let gameOver = false;
 let win = false;
 let gameStarted = false;
 let gamePaused = false;
-
 let isProcessingFrame = false;
 
 // -----------------------
@@ -304,17 +311,14 @@ let isProcessingFrame = false;
 let ortSession = null;
 let labelMap = null;
 let predictionBuffer = [];
-const PREDICTION_BUFFER_SIZE = 5;   // 隊友規格：紀錄最近 5 次預測
-const STABLE_COUNT = 4;             // 隊友規格：5 次中至少 4 次一致
-const CONFIDENCE_THRESHOLD = 0.75;  // 隊友規格：原始 logit 門檻
+const PREDICTION_BUFFER_SIZE = 5;   
+const STABLE_COUNT = 4;             
+const CONFIDENCE_THRESHOLD = 0.75;  
 const MODEL_FRAMES = 30;
 const FEATURE_DIM = 138;
 let modelLoaded = false;
-
-// Debug: 儲存最近一次推論的完整結果供畫面顯示
 let lastDebugInfo = null;
 
-// 詞彙難度對照表（可自由調整）
 const WORD_DIFFICULTY = {
   '棒': 1, '謝謝': 1, '高興': 1, '喜歡': 1,
   '名字': 2, '對不起': 2, '生氣': 2, '沒關係': 2,
@@ -360,9 +364,6 @@ async function initModel() {
     gesturesLoaded = true;
     updateDifficultySelection();
 
-    // ****************************************************************************
-    // ****************************************************************************
-    // 💥 【音樂系統更動】：防呆避免蓋掉音樂解析狀態
     if (!isAnalyzing) statusEl.textContent = '狀態: AI 模型載入完成';
   } catch (e) {
     console.error('Model init failed:', e);
@@ -373,20 +374,11 @@ async function initModel() {
 // -----------------------
 // 圖片資源
 // -----------------------
-const backgroundImg = new Image();
-backgroundImg.src = 'background.png';
-
-const houseImg = new Image();
-houseImg.src = 'house.png';
-
-const planeImg = new Image();
-planeImg.src = 'plane.png';
-
-const bombImg = new Image();
-bombImg.src = 'bomb.png';
-
-const explosionImg = new Image();
-explosionImg.src = 'explosion.png';
+const backgroundImg = new Image(); backgroundImg.src = 'background.png';
+const houseImg = new Image(); houseImg.src = 'house.png';
+const planeImg = new Image(); planeImg.src = 'plane.png';
+const bombImg = new Image(); bombImg.src = 'bomb.png';
+const explosionImg = new Image(); explosionImg.src = 'explosion.png';
 
 function randomVocab() {
   return currentVocabulary[Math.floor(Math.random() * currentVocabulary.length)];
@@ -399,35 +391,25 @@ class Plane {
   constructor() {
     this.width = 120; this.height = 50;
     this.x = 0; this.y = 50;
-    this.speed = 7; // 飛機的巡邏速度，可以自己調快慢
+    this.speed = 7; 
     this.direction = 1; 
   }
   
   move() {
-    // 飛機不斷往目前方向前進
     this.x += this.speed * this.direction;
-
-    // 取得右邊界 (扣掉右上角視訊鏡頭的寬度)
     const cameraWidth = 320;
     const videoAreaLeft = WIDTH - cameraWidth - 10;
     
-    // 碰到右邊界 -> 折返向左
     if (this.x + this.width >= videoAreaLeft) {
         this.x = videoAreaLeft - this.width;
         this.direction = -1;
     } 
-    // 碰到左邊界 -> 折返向右
     else if (this.x <= 0) {
         this.x = 0;
         this.direction = 1;
     }
   }
-  //---------------------------------------------------
-  //---------------------------------------------------------------------------------------------------
   
-    // ****************************************************************************
-    // delete maybeDropBomb()
-    // ****************************************************************************
   render(ctx) {
     if (planeImg.complete && planeImg.naturalWidth > 0) {
       const imgH = this.height;
@@ -447,41 +429,35 @@ class Plane {
 class Bomb {
   static WIDTH = 100; static HEIGHT = 100;
   static SPEED = 1.5; static MAX_SHRINK_TIME = 15;
-// ****************************************************************************
-// ****************************************************************************
-// 【音樂對拍系統：為炸彈加入完美掉落時間參數】 + targetTime
+
   constructor(x, y, targetTime, spawnTime) { 
     this.x = x ?? Math.random() * (WIDTH - Bomb.WIDTH);
     this.startY = y ?? -Bomb.HEIGHT;
-    this.y = this.startY;//0420 
-    // ****************************************************************************
-    // ****************************************************************************
-    this.targetTime = targetTime; // 🌟 為了誤差測量儲存目標時間
-    this.spawnTime = spawnTime;//0420
-    // ****************************************************************************
-    // ****************************************************************************
+    this.y = this.startY;
+    
+    this.targetTime = targetTime; 
+    this.spawnTime = spawnTime;
+    
     this.word = randomVocab().text;
     this.shrinking = false; this.shrinkTimer = 0;
     this.exploding = false; this.explosionTimer = 0;
     this.shouldExplode = false; this.finished = false; this.impactResolved = false;
-    this.houseDamageApplied = false;  // 標記房子傷害是否已應用
+    this.houseDamageApplied = false;  
   }
-  // ****************************************************************************
-  // ***************************************
+  
   fall(currentTime) {
     if (!this.shrinking && !this.exploding){
-      // 絕對時間同步公式：經過的時間 * 每秒應掉落的像素 (SPEED * 60幀)
         const elapsedTime = currentTime - this.spawnTime;
         this.y = this.startY + elapsedTime * (Bomb.SPEED * 60);
     }
   }
-  // ***************************************
-  // ****************************************************************************
+  
   startShrink(shouldExplode = false) {
     if (this.exploding) return;
     this.shrinking = true; this.shrinkTimer = 0;
     this.shouldExplode = shouldExplode; this.impactResolved = true;
   }
+  
   render(ctx) {
     if (this.finished) return;
     let drawX = this.x, drawY = this.y, drawW = Bomb.WIDTH, drawH = Bomb.HEIGHT;
@@ -519,8 +495,8 @@ class Bomb {
 // -----------------------
 let lastHandLandmarks = null;
 let lastVideoFrame = null;
-let handMissFrameCount = 0;  // 計數連續缺失的幀數
-const HAND_PERSISTENCE_FRAMES = 30;  // 手部節點持續顯示 30 幀（約 0.5 秒）後才清除
+let handMissFrameCount = 0;  
+const HAND_PERSISTENCE_FRAMES = 30;  
 
 let featureBuffer = [];
 const FEATURE_BUFFER_MAX = 30;
@@ -537,7 +513,7 @@ function resetGestureSequence() {
   isInferring = false;
   handWasPresent = false;
   handMissCount = 0;
-  handMissFrameCount = 0;  // 重置手部節點持久化計數
+  handMissFrameCount = 0; 
   if (progressEl) progressEl.textContent = '進度: 等待手勢...';
 }
 
@@ -550,21 +526,16 @@ async function runInference() {
     const results = await ortSession.run({ input: tensor });
     const output = Array.from(results.output.data);
 
-    // 取得當前難度允許的詞彙清單
     const activeWords = new Set(currentVocabulary.map(v => v.text));
-
-    // 建立 label index → word 對照，並遮蔽非當前難度的 logits
     const maskedLogits = output.map((logit, i) => {
       const word = labelMap[String(i)];
       return activeWords.has(word) ? logit : -Infinity;
     });
 
-    // 找最大 logit（只在允許的類別中）
     const maxLogit = Math.max(...maskedLogits);
     const predIdx = maskedLogits.indexOf(maxLogit);
     const predLabel = labelMap[String(predIdx)];
 
-    // Debug: 記錄所有類別的原始 logits
     const allPreds = [];
     for (let i = 0; i < output.length; i++) {
       const word = labelMap[String(i)] || `?${i}`;
@@ -582,17 +553,7 @@ async function runInference() {
     const topActive = allPreds.filter(p => p.active).slice(0, 3);
     console.log(`[推論] 緩衝=${featureBuffer.length}幀 | Top(該難度): ${topActive.map(p => `${p.label}(${p.logit.toFixed(2)})`).join(', ')}`);
     
-    // 診斷: 所有logits都很低时的警告
-    const maxLogitAll = Math.max(...output);
-    if (maxLogitAll < 0.1) {
-      console.warn('[警告] 所有logits都很低 (<0.1)，检查:', {
-        buffer帧数: featureBuffer.length,
-        所有logits: output.map(x => x.toFixed(4)).join(','),
-      });
-    }
-
     isInferring = false;
-    // 使用原始 logit 值（不做 softmax），跟隊友的 checkGesture 一致
     return { label: predLabel, confidence: maxLogit };
   } catch (e) {
     console.error('Inference error:', e);
@@ -605,13 +566,11 @@ function processInferenceResult(result) {
   if (!result) return;
   if (gestureEl) gestureEl.textContent = `偵測: ${result.label} (logit: ${result.confidence.toFixed(2)})`;
 
-  // 原始 logit 門檻 0.75（跟隊友的 checkGesture 一致）
   if (result.confidence < CONFIDENCE_THRESHOLD) {
     console.log(`[過濾] ${result.label} logit=${result.confidence.toFixed(2)} < 門檻 ${CONFIDENCE_THRESHOLD}`);
     return;
   }
 
-  // 連續判定邏輯 (5 次中至少 4 次一致)
   predictionBuffer.push(result.label);
   if (predictionBuffer.length > PREDICTION_BUFFER_SIZE) predictionBuffer.shift();
 
@@ -625,7 +584,7 @@ function processInferenceResult(result) {
       if (b.word === stableLabel && !b.shrinking && !b.exploding) {
         console.log(`[成功] 消除炸彈: ${stableLabel}`);
         b.startShrink(false);
-        hitCount++; // 🌟 新增這行：擊落數 +1
+        hitCount++; // 🌟 擊落數 +1
         inferenceCooldown = 30;
         featureBuffer = [];
         predictionBuffer = [];
@@ -642,10 +601,9 @@ function updateDynamicGesture(results) {
 
   if (!hasHand) {
     handMissCount++;
-    handMissFrameCount++;  // 累加缺失幀數
-    // 只有在連續缺失超過設定幀數才清除手部節點
+    handMissFrameCount++; 
     if (handMissFrameCount > HAND_PERSISTENCE_FRAMES) {
-      lastHandLandmarks = null;  // 只現在才真正清除
+      lastHandLandmarks = null; 
       featureBuffer = [];
     }
     if (handMissCount < 5) return;
@@ -658,26 +616,12 @@ function updateDynamicGesture(results) {
     return;
   }
 
-  // 檢測到手時重置計數
   handMissCount = 0;
-  handMissFrameCount = 0;  // 重置缺失計數
+  handMissFrameCount = 0; 
   handWasPresent = true;
   
   if (typeof extractFrame138 === 'function') {
       const frame = extractFrame138(results);
-      
-      // 诊断：检查特征是否全为0或其他异常值
-      const nonZeroCount = frame.filter(v => Math.abs(v) > 1e-6).length;
-      if (featureBuffer.length === 0 && nonZeroCount < 10) {
-        console.warn('[特征提取] 非零值过少:', nonZeroCount, '个，特征可能有问题');
-        console.log('[特征样本]', {
-          leftHand: frame.slice(0, 9).map(x => x.toFixed(3)).join(','),
-          rightHand: frame.slice(63, 72).map(x => x.toFixed(3)).join(','),
-          global: frame.slice(126, 138).map(x => x.toFixed(3)).join(','),
-          诊断信息: typeof lastFeatureDiag !== 'undefined' ? lastFeatureDiag : '无',
-        });
-      }
-      
       featureBuffer.push(frame);
       if (featureBuffer.length > FEATURE_BUFFER_MAX) featureBuffer.shift();
       if (progressEl) progressEl.textContent = `進度: 錄製動作 (${featureBuffer.length}/${FEATURE_BUFFER_MAX})`;
@@ -689,7 +633,7 @@ function updateDynamicGesture(results) {
         }
       }
   } else {
-      console.warn("找不到 extractFrame138 函數，請確保它在其他檔案或全域中定義。");
+      console.warn("找不到 extractFrame138 函數，請確保它在全域中定義。");
   }
 }
 
@@ -714,6 +658,7 @@ function initHouses() {
   }
 }
 
+// 🌟 包含「喚醒魔法」的完整版 updateHud
 function updateHud() {
   scoreEl.textContent = `房子數: ${houses.length}`;
   lifeEl.textContent = `已掉落: ${totalBombsDropped}/${TARGET_BOMBS}`;
@@ -722,17 +667,19 @@ function updateHud() {
     statusEl.textContent = '狀態: 🎵 音樂解析中，請稍候...';
   } else if (!gameStarted) {
     if (musicBeats.length > 0) {
-      statusEl.textContent = `狀態: ✅ 載入 ${TARGET_BOMBS} 顆炸彈 (請按開始遊戲)`;
-      // 🌟 當 AI 準備好時，確保主控按鈕顯示出來
-      if (actionBtn && modelLoaded && gesturesLoaded && musicSelectionUI.style.display === 'none') {
-          actionBtn.style.display = 'block';
+      statusEl.textContent = `狀態: ✅ 載入 ${TARGET_BOMBS} 顆炸彈`;
+      
+      // 🌟 喚醒魔法：如果背景的 AI 模型終於載入完了，就把灰色按鈕變成綠色！
+      if (modelLoaded && gesturesLoaded && actionBtn && actionBtn.disabled && (!musicSelectionUI || musicSelectionUI.style.display === 'none')) {
+          actionBtn.textContent = '開始遊戲';
+          actionBtn.style.backgroundColor = '#0f0';
+          actionBtn.disabled = false;
       }
     } else {
-      statusEl.textContent = modelLoaded ? '狀態: 準備中 (請選擇音樂)' : '狀態: 正在載入模型...';
+      statusEl.textContent = modelLoaded ? '狀態: 準備中 (請選擇音樂)' : '狀態: 正在載入 AI 模型...';
     }
   } else if (gameOver) {
     statusEl.textContent = win ? '狀態: 勝利！' : '狀態: 失敗';
-    // 🌟 遊戲結束時，讓主控按鈕飄回中間變成「重新開始」
     if (actionBtn) {
         actionBtn.style.display = 'block';
         actionBtn.className = 'center-state';
@@ -746,13 +693,12 @@ function updateHud() {
 }
 
 // -----------------------
-// 繪製攝影機畫面與手部節點（所有狀態都顯示）
+// 繪製攝影機畫面與手部節點
 // -----------------------
-let camVideoAspect = 16/9;  // 1280x720 的實際比例
+let camVideoAspect = 16/9; 
 
 function renderCamera() {
-  // 計算正確的顯示尺寸（保持16:9比例）
-  const camMaxW = 320;  // 回復為 320 像素
+  const camMaxW = 320; 
   const camMaxH = 180;
   let camW = camMaxW;
   let camH = camW / camVideoAspect;
@@ -760,10 +706,8 @@ function renderCamera() {
     camH = camMaxH;
     camW = camH * camVideoAspect;
   }
-  // 放在右上角
   const camX = WIDTH - camW - 10, camY = 10;
 
-  // 鏡像繪製攝影機畫面
   if (lastVideoFrame) {
     ctx.save();
     ctx.translate(camX + camW, camY);
@@ -772,12 +716,10 @@ function renderCamera() {
     ctx.restore();
   }
 
-  // 綠色邊框
   ctx.strokeStyle = '#0f0';
   ctx.lineWidth = 2;
   ctx.strokeRect(camX, camY, camW, camH);
 
-  // 繪製手部節點（鏡像，使用實際顯示尺寸）
   if (lastHandLandmarks && lastHandLandmarks.length > 0) {
     ctx.fillStyle = '#0f0';
     for (const hand of lastHandLandmarks) {
@@ -793,9 +735,8 @@ function renderCamera() {
 }
 
 // -----------------------
-// Debug 資訊疊加層（顯示模型推論 + 特徵診斷）
+// Debug 資訊疊加層
 // -----------------------
-// 儲存最近一次的特徵診斷
 let lastFeatureDiag = null;
 
 function renderDebugOverlay() {
@@ -811,7 +752,6 @@ function renderDebugOverlay() {
   ly += 18;
   ctx.fillText(`[Smooth] ${predictionBuffer.join(',') || '(空)'} (需${STABLE_COUNT}/${PREDICTION_BUFFER_SIZE}次)`, x + 8, ly);
 
-  // 特徵診斷區
   ly += 22;
   ctx.fillStyle = '#0ff';
   ctx.fillText('=== 特徵診斷 ===', x + 8, ly);
@@ -837,7 +777,6 @@ function renderDebugOverlay() {
     ly += 32;
   }
 
-  // 模型預測區
   ly += 16;
   if (lastDebugInfo) {
     ctx.fillStyle = '#ff0';
@@ -861,19 +800,12 @@ function renderDebugOverlay() {
   }
 }
 
-// ********************************************************************************
-//*****************************************
-// 🎮 遊戲結束處理函數
-// ==========================================
-// 🎮 遊戲結束處理函數 (加強版)
-// ==========================================
-// ==========================================
+// -----------------------
 // 🎮 遊戲結束處理函數 (加強版 + 華麗排行榜 UI)
-// ==========================================
+// -----------------------
 function handleGameOver(isWin) {
     console.log("🚨 成功觸發結算函數！準備停止音樂與上傳分數..."); 
 
-    // 1. 停止背景音樂
     try {
         const bgm = document.getElementById('bgmPlayer');
         if (bgm && !bgm.paused) {
@@ -884,10 +816,9 @@ function handleGameOver(isWin) {
         console.log("音樂停止失敗，但沒關係繼續結算：", e);
     }
 
-    // 2. 計算最後分數
+    // 計算最後分數
     const finalScore = (hitCount * 100) + (houses.length * 500);
     
-    // 3. 延遲 0.5 秒後跳出輸入名字視窗
     setTimeout(() => {
         const message = isWin ? "🎉 恭喜過關！" : "💥 遊戲失敗！";
         const playerName = prompt(`${message} 你的分數是 ${finalScore}，請輸入大名登入排行榜：`, "神秘玩家");
@@ -895,15 +826,13 @@ function handleGameOver(isWin) {
         if (playerName) {
             console.log(`準備上傳 -> 玩家: ${playerName}, 分數: ${finalScore}`);
             
-            // 注意這裡加了 async
             saveScoreToCloud(playerName, finalScore).then(async () => { 
                 
-                // 📊 算名次魔法：查詢資料庫裡「分數 > 這次玩家分數」的紀錄有幾筆
+                // 📊 算名次魔法
                 const rankQuery = query(collection(db, "leaderboard"), where("score", ">", finalScore));
                 const rankSnapshot = await getCountFromServer(rankQuery);
                 const currentRank = rankSnapshot.data().count + 1; 
                 
-                // 🏆 套用你的級距邏輯
                 let rankDisplay = "";
                 if (currentRank <= 100) {
                     rankDisplay = `目前排名：第 ${currentRank} 名`;
@@ -912,7 +841,6 @@ function handleGameOver(isWin) {
                     rankDisplay = `目前排名：${level}+ 名`;
                 }
 
-                // 抓取前 10 名顯示
                 getTop10Scores().then(top10 => {
                     const modal = document.getElementById('leaderboard-modal');
                     const listContainer = document.getElementById('leaderboard-list');
@@ -928,7 +856,6 @@ function handleGameOver(isWin) {
                         `;
                     });
 
-                    // 🌟 在名單最下方，加入專屬的個人名次顯示列
                     listContainer.innerHTML += `
                         <li style="display: flex; justify-content: center; padding: 15px 5px 5px 5px; margin-top: 10px; border-top: 2px solid #0f0; font-size: 20px; font-weight: bold; color: #0f0; background: rgba(0,255,0,0.1); border-radius: 8px; text-align: center;">
                             ${playerName} 你的分數：${finalScore} 分<br>
@@ -944,13 +871,11 @@ function handleGameOver(isWin) {
         }
     }, 500);
 }
-//******************************************
-//***************************************************************************************
+
 // -----------------------
 // 主迴圈
 // -----------------------
 function gameLoop() {
-  // 继续计数手部被检测到的时间，确保每帧都更新（即使 predictWebcam 延迟）
   if (handMissFrameCount > 0) {
     handMissFrameCount++;
     if (handMissFrameCount > HAND_PERSISTENCE_FRAMES) {
@@ -966,20 +891,14 @@ function gameLoop() {
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
-    // ★ 遊戲開始前也顯示攝影機 + 手部節點
     renderCamera();
     renderDebugOverlay();
 
     ctx.fillStyle = '#FFF'; ctx.font = '48px Arial'; ctx.textAlign = 'center';
     if (!gesturesLoaded || !modelLoaded) {
       ctx.fillText('正在載入模型，請稍候...', WIDTH / 2, Math.max(HEIGHT / 2, 50));
-    // ****************************************************************************
-    // ***************************************
     } else if (musicBeats.length === 0) {
-      // 💥 【音樂系統提示】
       ctx.fillText('請先在左上角上傳音樂', WIDTH / 2, Math.max(HEIGHT / 2, 50));
-    // ***************************************
-    // ****************************************************************************
     }
     updateHud();
     requestAnimationFrame(gameLoop);
@@ -991,90 +910,65 @@ function gameLoop() {
   if (backgroundImg.complete && backgroundImg.naturalWidth > 0) ctx.drawImage(backgroundImg, 0, 0, WIDTH, HEIGHT);
   else { ctx.fillStyle = '#003366'; ctx.fillRect(0, 0, WIDTH, HEIGHT); }
 
-  // ★ 遊戲中也顯示攝影機 + 手部節點
   renderCamera();
 
   if (!gameOver && !gamePaused) {
     plane.move();
 
-    //-------------------------------------------------------------------------------------------------0420
-    //-------------------------------------------------------
-    // 【音樂對拍系統：未來視精準掉落邏輯】
+    // 🌟 時間綁定物理引擎：未來視掉落邏輯
     let currentTime = bgmPlayer.currentTime + AUDIO_OFFSET; 
     
-    // 精準計算真實的起點(飛機肚子)與終點(地板)距離
-    const baseY = plane.y + plane.height - 30; // 炸彈起點 (70)
-    let dropDistance = HEIGHT - Bomb.HEIGHT - baseY; // 真實掉落距離
+    const baseY = plane.y + plane.height - 30; 
+    let dropDistance = HEIGHT - Bomb.HEIGHT - baseY; 
     
     let travelTime = dropDistance / (Bomb.SPEED * 60); 
     let lookAheadTime = currentTime + travelTime;
 
-    // 只要時間到了，就把炸彈生出來
     while (currentBeatIndex < musicBeats.length && lookAheadTime >= musicBeats[currentBeatIndex].time) {
         let targetTime = musicBeats[currentBeatIndex].time;
         let spawnTime = targetTime - travelTime;
         
-        // 🌟 修正重點：不再讀取 targetLane，直接計算「飛機正中央的 X 座標」
         let dropX = plane.x + (plane.width / 2) - (Bomb.WIDTH / 2);
-        
-        // 生成炸彈 (給它純粹的 dropX 和 baseY)
         bombs.push(new Bomb(dropX, baseY, targetTime, spawnTime)); 
         
         totalBombsDropped += 1;
         currentBeatIndex += 1; 
     }
-    //【音樂掉落系統結束】
-    // ***************************************
-    // ****************************************************************************
   }
 
-  // 房子
   for (const h of houses) {
     if (houseImg.complete && houseImg.naturalWidth > 0) ctx.drawImage(houseImg, h.x, h.y, h.width, h.height);
     else { ctx.fillStyle = '#ffaa00'; ctx.fillRect(h.x, h.y, h.width, h.height); }
   }
 
-  // 炸彈
   if (!gameOver) {
     for (let i = bombs.length - 1; i >= 0; i--) {
       const b = bombs[i];
-      if (!gamePaused) b.fall(bgmPlayer.currentTime + AUDIO_OFFSET);//0420
+      if (!gamePaused) b.fall(bgmPlayer.currentTime + AUDIO_OFFSET);
       b.render(ctx);
       const bombBottom = b.y + Bomb.HEIGHT;
-      // 只有碰到地面才爆炸，忽略房子碰撞
       const hitGround = bombBottom >= HEIGHT;
       
       if (!b.impactResolved && !b.shrinking && !b.exploding && hitGround) {
         
-        // ****************************************************************************
-        // ***************************************
-        // 【我的音樂對拍系統：150ms 誤差測量雷達】
         if (b.targetTime !== undefined) {
-              // 取得炸彈碰到地面瞬間的「真實音樂時間」
               let currentRealTime = bgmPlayer.currentTime + AUDIO_OFFSET;
-              // 計算誤差 (絕對值)
               let error = Math.abs(currentRealTime - b.targetTime);
-              
-              // 印出華麗的報表，如果有大於 0.5 秒的就亮紅燈，不然就亮綠燈
               if (error > 0.5) {
                   console.log(`🔴 [嚴重延遲] 目標: ${b.targetTime.toFixed(3)}s | 實際: ${currentRealTime.toFixed(3)}s | 誤差: ${error.toFixed(3)} 秒`);
               } else {
                   console.log(`🟢 [完美對拍] 目標: ${b.targetTime.toFixed(3)}s | 實際: ${currentRealTime.toFixed(3)}s | 誤差: ${error.toFixed(3)} 秒`);
               }
           }
-        // ***************************************
-        // ****************************************************************************
 
-        b.impactResolved = true;  // 標記已接觸
+        b.impactResolved = true;  
         b.shouldExplode = true;
-        b.startShrink(true);  // 開始爆炸縮小動畫
+        b.startShrink(true);  
       }
 
-      // 爆炸動畫完成後再消除最近的房子
       if (b.finished && b.shouldExplode && !b.houseDamageApplied) {
         b.houseDamageApplied = true;
         if (houses.length > 0) {
-          // 找到距離炸弹爆炸點最近的房子
           let closestIdx = 0;
           let closestDist = Infinity;
           const bombCenterX = b.x + Bomb.WIDTH / 2;
@@ -1095,11 +989,10 @@ function gameLoop() {
       }
       if (!b.shrinking && !b.exploding && (b.finished || b.shrinkTimer > Bomb.MAX_SHRINK_TIME)) bombs.splice(i, 1);
     }
-    // 🏆 判定勝利的條件
     if (!gameOver && totalBombsDropped >= TARGET_BOMBS && bombs.length === 0 && houses.length > 0) { 
         gameOver = true; 
         win = true; 
-        handleGameOver(true); // 呼叫結算函數，傳入 true 代表勝利
+        handleGameOver(true); 
     }
   } else {
     ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 0, WIDTH, HEIGHT);
@@ -1107,7 +1000,6 @@ function gameLoop() {
     ctx.fillText(win ? '勝利！' : '失敗', WIDTH / 2, HEIGHT / 2 - 20);
   }
 
-  // 顯示暫停畫面
   if (gamePaused) {
     ctx.fillStyle = 'rgba(0,0,0,0.7)';
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
@@ -1131,7 +1023,6 @@ async function initWebcam() {
   statusEl.textContent = '狀態: 正在載入 Tasks Vision 引擎...';
 
   try {
-    // 使用 ES Module Dynamic Import 載入 @mediapipe/tasks-vision
     const visionModule = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs");
     const { FilesetResolver: FR, HandLandmarker: HL } = visionModule;
 
@@ -1147,7 +1038,7 @@ async function initWebcam() {
         delegate: "GPU"
       },
       runningMode: "VIDEO",
-      numHands: 2,  // 同時檢測二隻手
+      numHands: 2,  
       minHandDetectionConfidence: 0.5,
       minHandPresenceConfidence: 0.5,
       minTrackingConfidence: 0.5
@@ -1155,7 +1046,6 @@ async function initWebcam() {
 
     console.log("[Hand] HandLandmarker 建立成功 (Tasks Vision API)");
 
-    // 開啟攝影機 (要求 16:9 以匹配訓練影片的比例，避免特徵變形)
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { width: 1280, height: 720 }
     });
@@ -1172,17 +1062,15 @@ async function initWebcam() {
 }
 
 let lastPredictTime = 0;
-const PREDICT_FRAME_INTERVAL = 33;  // 30 FPS (改善手部同步)
+const PREDICT_FRAME_INTERVAL = 33; 
 async function predictWebcam() {
   if (!handLandmarker) return;
 
-  // 確認影片播放中
   if (video.currentTime === lastVideoTime) {
     requestAnimationFrame(predictWebcam);
     return;
   }
 
-  // 限制推論幀率約 30 FPS (每 33ms 執行一次) 改善手部節點同步
   const now = performance.now();
   if (now - lastPredictTime < PREDICT_FRAME_INTERVAL) {
     requestAnimationFrame(predictWebcam);
@@ -1196,15 +1084,13 @@ async function predictWebcam() {
     const startTimeMs = performance.now();
     const results = handLandmarker.detectForVideo(video, startTimeMs);
 
-    // Hand Landmarker 返回的是一個或兩個手的書蹟
     let leftHandLandmarks = null;
     let rightHandLandmarks = null;
     
     if (results.landmarks && results.landmarks.length > 0) {
       if (results.handedness && results.handedness.length > 0) {
-        // 根據 handedness 的位置區分左手和右手
         for (let i = 0; i < results.landmarks.length; i++) {
-          const handedness = results.handedness[i][0].categoryName; // 'Left' or 'Right'
+          const handedness = results.handedness[i][0].categoryName; 
           if (handedness === 'Left') {
             leftHandLandmarks = results.landmarks[i];
           } else if (handedness === 'Right') {
@@ -1214,15 +1100,13 @@ async function predictWebcam() {
       }
     }
 
-    // 格式轉換以相容舊的 results 格式 (用於除錯顯示與特徵提取)
     const formattedResults = {
-      poseLandmarks: null,  // Hand Landmarker 不會返回體態
-      faceLandmarks: null,  // Hand Landmarker 不會返回臉部
+      poseLandmarks: null,  
+      faceLandmarks: null,  
       leftHandLandmarks: leftHandLandmarks,
       rightHandLandmarks: rightHandLandmarks,
     };
     
-    // 诊断：检查HandLandmarker返回的数据格式
     if (results.landmarks && results.landmarks.length > 0) {
       const sampleLm = results.landmarks[0];
       if (sampleLm && sampleLm.length > 0) {
@@ -1257,9 +1141,7 @@ function initGame() {
   initHouses();
   plane = new Plane();
 
-  // 移除鍵盤事件，改用按鈕
-
- // 🌟 動態主控按鈕邏輯
+  // 🌟 動態主控按鈕邏輯
   if (actionBtn) {
     actionBtn.addEventListener('click', () => {
       
@@ -1304,19 +1186,13 @@ function initGame() {
     });
   }
 
-  //**************************
-  //********
   const closeBoardBtn = document.getElementById('close-leaderboard-btn');
   if (closeBoardBtn) {
       closeBoardBtn.addEventListener('click', () => {
-          // 隱藏排行榜
           document.getElementById('leaderboard-modal').style.display = 'none';
-          // 觸發重新開始的邏輯 (改成 actionBtn)
           if (actionBtn) actionBtn.click(); 
       });
   }
-  //********
-  //**************************
 
   updateHud();
   requestAnimationFrame(gameLoop);
