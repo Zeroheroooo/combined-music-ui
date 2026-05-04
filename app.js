@@ -71,8 +71,12 @@ const lifeEl = document.getElementById('life');
 const video = document.getElementById('video');
 const gestureEl = document.getElementById('gesture');
 const progressEl = document.getElementById('progress');
-const startBtn = document.getElementById('start-btn');
-const pauseBtn = document.getElementById('pause-btn');
+// 🌟 新增的 UI 變數
+const musicSelectionUI = document.getElementById('musicSelectionUI');
+const defaultMusicBtn = document.getElementById('defaultMusicBtn');
+const parsingStatus = document.getElementById('parsingStatus');
+const actionBtn = document.getElementById('actionBtn');
+// (原本的 audioUpload 應該還在，確保有這行：const audioUpload = document.getElementById('audioUpload');)
 
 let WIDTH = 600;
 let HEIGHT = 800;
@@ -97,44 +101,86 @@ const AUDIO_OFFSET = 0.08; // 🌟 為了教授要求的 <150ms 誤差校正值
 const bgmPlayer = document.getElementById('bgmPlayer');
 const audioUpload = document.getElementById('audioUpload');
 
+// 🌟 統一的音樂解析與啟動函式
+async function processAudioData(arrayBuffer, sourceURL) {
+    isAnalyzing = true;
+    if (parsingStatus) parsingStatus.textContent = '🎵 音樂解析中，請稍候...';
+    if (statusEl) statusEl.textContent = '狀態: 🎵 音樂解析中...';
+    
+    try {
+        bgmPlayer.src = sourceURL;
+        
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+        musicBeats = await analyzeBeatsSmartJS(audioBuffer);
+        
+        if (parsingStatus) parsingStatus.textContent = `✅ 解析完成！載入 ${TARGET_BOMBS} 顆炸彈`;
+        if (statusEl) statusEl.textContent = `狀態: ✅ 解析完成！`;
+        
+        // 延遲 0.8 秒關閉黑色選單，讓使用者看到「完成」的狀態
+        setTimeout(() => {
+            if (musicSelectionUI) musicSelectionUI.style.display = 'none';
+            // 顯示畫面正中間的「開始遊戲」按鈕
+            if (actionBtn && modelLoaded && gesturesLoaded) {
+                actionBtn.style.display = 'block';
+                actionBtn.className = 'center-state';
+                actionBtn.textContent = '開始遊戲';
+            }
+        }, 800);
+
+    } catch (error) {
+        console.error("解析失敗:", error);
+        alert("音樂格式不正確或解析失敗，請換一首歌試試！");
+        if (parsingStatus) parsingStatus.textContent = '';
+        if (audioUpload) audioUpload.disabled = false;
+        if (defaultMusicBtn) defaultMusicBtn.disabled = false;
+    } finally {
+        isAnalyzing = false;
+    }
+}
+
+// 🌟 路徑 A：本地上傳監聽
 if (audioUpload) {
     audioUpload.addEventListener('change', async function(e) {
         const file = e.target.files[0];
         if (!file) return;
-
-        // 🛑 音樂系統防線一：限制檔案大小 (15 MB)
-        const maxSize = 15 * 1024 * 1024; 
-        if (file.size > maxSize) {
+        
+        // 防呆：檔案大小限制 15MB
+        if (file.size > 15 * 1024 * 1024) {
             alert("請上傳 15MB 以下的音樂檔。");
             e.target.value = ''; return; 
         }
 
-        // 🛑 音樂系統防線二：開始解析時鎖死按鈕
+        if (defaultMusicBtn) defaultMusicBtn.disabled = true; // 鎖定預設按鈕
         audioUpload.disabled = true;
-        if (startBtn) startBtn.disabled = true; 
+        
+        const arrayBuffer = await file.arrayBuffer();
+        const fileURL = URL.createObjectURL(file);
+        await processAudioData(arrayBuffer, fileURL);
+    });
+}
 
-        if (statusEl) statusEl.textContent = '狀態: 🎵 音樂解析中...';
-        isAnalyzing = true;
-
+// 🌟 路徑 B：預設音樂監聽
+if (defaultMusicBtn) {
+    defaultMusicBtn.addEventListener('click', async function() {
+        if (defaultMusicBtn) defaultMusicBtn.disabled = true;
+        if (audioUpload) audioUpload.disabled = true; 
+        
         try {
-            const fileURL = URL.createObjectURL(file);
-            bgmPlayer.src = fileURL;
-            const arrayBuffer = await file.arrayBuffer();
-            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-            musicBeats = await analyzeBeatsSmartJS(audioBuffer);
-            if (statusEl) statusEl.textContent = `狀態: ✅ 解析完成！載入 ${TARGET_BOMBS} 顆炸彈`;
-        } catch (error) {
-            console.error("音樂解析失敗:", error);
-            alert("這首音樂無法解析，請換一首歌！");
-            if (statusEl) statusEl.textContent = '狀態: 音樂解析失敗';
-        } finally {
-            isAnalyzing = false;
-            audioUpload.disabled = false;
-            if (startBtn && modelLoaded && gesturesLoaded) startBtn.disabled = false;
+            // 讀取專案資料夾內的 default_track.mp3
+            const response = await fetch('./default_track.mp3');
+            if (!response.ok) throw new Error("找不到檔案");
+            const arrayBuffer = await response.arrayBuffer();
+            await processAudioData(arrayBuffer, './default_track.mp3');
+        } catch (err) {
+            alert("找不到預設音樂檔 (default_track.mp3)，請使用本地上傳！");
+            if (defaultMusicBtn) defaultMusicBtn.disabled = false;
+            if (audioUpload) audioUpload.disabled = false;
         }
     });
 }
+
+
 
 async function analyzeBeatsSmartJS(audioBuffer) {
     const duration = audioBuffer.duration;
@@ -685,32 +731,18 @@ function updateHud() {
 // ***************************************
 // ****************************************************************************
     
-    if (startBtn) {
-      startBtn.style.display = (modelLoaded && gesturesLoaded) ? 'block' : 'none';
-      startBtn.textContent = '開始遊戲';
-    }
-    if (pauseBtn) pauseBtn.style.display = 'none';
-  } else if (gameOver) {
+} else if (gameOver) {
     statusEl.textContent = win ? '狀態: 勝利！' : '狀態: 失敗';
-    if (startBtn) {
-      startBtn.style.display = 'block';
-      startBtn.textContent = '重新開始';
+    // 🌟 遊戲結束時，讓主控按鈕飄回中間變成「重新開始」
+    if (actionBtn) {
+        actionBtn.style.display = 'block';
+        actionBtn.className = 'center-state';
+        actionBtn.textContent = '重新開始';
     }
-    if (pauseBtn) pauseBtn.style.display = 'none';
   } else if (gamePaused) {
     statusEl.textContent = '狀態: 暫停中';
-    if (startBtn) startBtn.style.display = 'none';
-    if (pauseBtn) {
-      pauseBtn.style.display = 'block';
-      pauseBtn.textContent = '繼續';
-    }
   } else {
     statusEl.textContent = '狀態: 遊玩中';
-    if (startBtn) startBtn.style.display = 'none';
-    if (pauseBtn) {
-      pauseBtn.style.display = 'block';
-      pauseBtn.textContent = '暫停';
-    }
   }
 }
 
@@ -1221,48 +1253,47 @@ function initGame() {
 
   // 移除鍵盤事件，改用按鈕
 
-  // 開始遊戲按鈕
-  if (startBtn) {
-    startBtn.addEventListener('click', () => {
-
-    // ****************************************************************************
-    // ***************************************
-    // 【我的音樂對拍系統：防呆控制與播放連動】
-      if (musicBeats.length === 0 || isAnalyzing) {
-        alert("請先上傳音樂並等待解析完成喔！");
-        return; 
-      }
-
-      if (!gameStarted) {
+ // 🌟 動態主控按鈕邏輯
+  if (actionBtn) {
+    actionBtn.addEventListener('click', () => {
+      
+      // 情況 1：遊戲還沒開始 或 已經結束 -> [開始 / 重新開始遊戲]
+      if (!gameStarted || gameOver) {
         if (!gesturesLoaded || !modelLoaded) return;
-        gameStarted = true;
-        gamePaused = false;
-        bgmPlayer.play(); // 🌟 音樂連動：播放*********************************
-        updateHud();
-      } else if (gameOver) {
+        
         gameStarted = true; gameOver = false; win = false; gamePaused = false;
-        bombs = []; totalBombsDropped = 0; currentBeatIndex = 0;
-        hitCount = 0; // 🌟 新增這行：重新開始時擊落數歸零
-        initHouses(); plane = new Plane();
-        resetGestureSequence();
-        bgmPlayer.currentTime = 0; // 🌟 音樂連動：歸零***********************
-        bgmPlayer.play();          // 🌟 音樂連動：播放***********************
+        bombs = []; totalBombsDropped = 0; currentBeatIndex = 0; hitCount = 0;
+        initHouses(); plane = new Plane(); resetGestureSequence();
+        
+        bgmPlayer.currentTime = 0;
+        bgmPlayer.play();
         updateHud();
+        
+        // 💫 動畫魔法：飄移到左上角變成暫停鍵
+        actionBtn.className = 'top-left-state';
+        actionBtn.textContent = '暫停遊戲';
+      } 
+      
+      // 情況 2：遊戲進行中 -> [暫停遊戲]
+      else if (gameStarted && !gameOver && !gamePaused) {
+        gamePaused = true;
+        bgmPlayer.pause();
+        updateHud();
+        
+        // 💫 動畫魔法：飄回畫面正中央
+        actionBtn.className = 'center-state';
+        actionBtn.textContent = '繼續遊戲';
       }
-    });
-  }
-
-  // 暫停按鈕
-  if (pauseBtn) {
-    pauseBtn.addEventListener('click', () => {
-      if (gameStarted && !gameOver) {
-        gamePaused = !gamePaused;
-        if (gamePaused) {
-            bgmPlayer.pause(); // 🌟 音樂連動：暫停音樂***************************
-        } else {
-            bgmPlayer.play();  // 🌟 音樂連動：恢復音樂***************************
-        }
+      
+      // 情況 3：遊戲暫停中 -> [繼續遊戲]
+      else if (gameStarted && !gameOver && gamePaused) {
+        gamePaused = false;
+        bgmPlayer.play();
         updateHud();
+        
+        // 💫 動畫魔法：飄回左上角
+        actionBtn.className = 'top-left-state';
+        actionBtn.textContent = '暫停遊戲';
       }
     });
   }
