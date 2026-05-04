@@ -12,7 +12,7 @@ window.testGet = getTop10Scores;
 // 1. 核心大腦 (12.12.0 版)
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
 // 2. 雲端資料庫 (12.12.0 版) - 這是我們為了排行榜自己加上去的！
-import { getFirestore, collection, addDoc, getDocs, query, orderBy, limit, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+import { getFirestore, collection, addDoc, getDocs, query, orderBy, limit, serverTimestamp, getCountFromServer, where } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
 // 3. 你的專屬金鑰
 const firebaseConfig = {
@@ -718,20 +718,19 @@ function updateHud() {
   scoreEl.textContent = `房子數: ${houses.length}`;
   lifeEl.textContent = `已掉落: ${totalBombsDropped}/${TARGET_BOMBS}`;
 
-// ****************************************************************************
-// ***************************************
   if (isAnalyzing) {
     statusEl.textContent = '狀態: 🎵 音樂解析中，請稍候...';
   } else if (!gameStarted) {
     if (musicBeats.length > 0) {
-      statusEl.textContent = `狀態: ✅ 載入 ${TARGET_BOMBS} 顆炸彈 (按開始遊戲)`;
+      statusEl.textContent = `狀態: ✅ 載入 ${TARGET_BOMBS} 顆炸彈 (請按開始遊戲)`;
+      // 🌟 當 AI 準備好時，確保主控按鈕顯示出來
+      if (actionBtn && modelLoaded && gesturesLoaded && musicSelectionUI.style.display === 'none') {
+          actionBtn.style.display = 'block';
+      }
     } else {
-      statusEl.textContent = modelLoaded ? '狀態: 準備中 (請先上傳音樂)' : '狀態: 正在載入模型...';
+      statusEl.textContent = modelLoaded ? '狀態: 準備中 (請選擇音樂)' : '狀態: 正在載入模型...';
     }
-// ***************************************
-// ****************************************************************************
-    
-} else if (gameOver) {
+  } else if (gameOver) {
     statusEl.textContent = win ? '狀態: 勝利！' : '狀態: 失敗';
     // 🌟 遊戲結束時，讓主控按鈕飄回中間變成「重新開始」
     if (actionBtn) {
@@ -886,7 +885,6 @@ function handleGameOver(isWin) {
     }
 
     // 2. 計算最後分數
-    // 🌟 修正重點：每成功消除一顆炸彈 +100 分，每剩餘一棟房子 +500 分
     const finalScore = (hitCount * 100) + (houses.length * 500);
     
     // 3. 延遲 0.5 秒後跳出輸入名字視窗
@@ -894,31 +892,34 @@ function handleGameOver(isWin) {
         const message = isWin ? "🎉 恭喜過關！" : "💥 遊戲失敗！";
         const playerName = prompt(`${message} 你的分數是 ${finalScore}，請輸入大名登入排行榜：`, "神秘玩家");
         
-        // 4. 如果有輸入名字，就上傳並顯示華麗排行榜
         if (playerName) {
             console.log(`準備上傳 -> 玩家: ${playerName}, 分數: ${finalScore}`);
             
-            // 呼叫 Firebase 上傳分數
-            saveScoreToCloud(playerName, finalScore).then(() => {
+            // 注意這裡加了 async
+            saveScoreToCloud(playerName, finalScore).then(async () => { 
                 
-                // 上傳完畢後，抓取最新前 10 名
+                // 📊 算名次魔法：查詢資料庫裡「分數 > 這次玩家分數」的紀錄有幾筆
+                const rankQuery = query(collection(db, "leaderboard"), where("score", ">", finalScore));
+                const rankSnapshot = await getCountFromServer(rankQuery);
+                const currentRank = rankSnapshot.data().count + 1; 
+                
+                // 🏆 套用你的級距邏輯
+                let rankDisplay = "";
+                if (currentRank <= 100) {
+                    rankDisplay = `目前排名：第 ${currentRank} 名`;
+                } else {
+                    const level = Math.floor(currentRank / 100) * 100;
+                    rankDisplay = `目前排名：${level}+ 名`;
+                }
+
+                // 抓取前 10 名顯示
                 getTop10Scores().then(top10 => {
-                    
-                    // --- 👇 這裡就是把 Console 變成畫面的魔法 👇 ---
                     const modal = document.getElementById('leaderboard-modal');
                     const listContainer = document.getElementById('leaderboard-list');
-                    listContainer.innerHTML = ''; // 先清空舊名單
+                    listContainer.innerHTML = ''; 
                     
-                    // 跑迴圈把前 10 名塞進 HTML 裡
                     top10.forEach((player, index) => {
-                        // 給前三名加個超炫獎牌
-                        let medal = '';
-                        if (index === 0) medal = '🥇';
-                        else if (index === 1) medal = '🥈';
-                        else if (index === 2) medal = '🥉';
-                        else medal = `<span style="display:inline-block; width:25px;">${index + 1}.</span>`;
-
-                        // 塞入 HTML 條目
+                        let medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `<span style="display:inline-block; width:25px;">${index + 1}.</span>`;
                         listContainer.innerHTML += `
                             <li style="display: flex; justify-content: space-between; padding: 10px 5px; border-bottom: 1px dashed #444; font-size: 18px;">
                                 <span style="font-weight: bold;">${medal} ${player.name}</span>
@@ -927,10 +928,15 @@ function handleGameOver(isWin) {
                         `;
                     });
 
-                    // 把隱藏的排行榜視窗顯示出來 (flex 可以讓它置中)
-                    modal.style.display = 'flex';
-                    // --- 👆 魔法結束 👆 ---
+                    // 🌟 在名單最下方，加入專屬的個人名次顯示列
+                    listContainer.innerHTML += `
+                        <li style="display: flex; justify-content: center; padding: 15px 5px 5px 5px; margin-top: 10px; border-top: 2px solid #0f0; font-size: 20px; font-weight: bold; color: #0f0; background: rgba(0,255,0,0.1); border-radius: 8px; text-align: center;">
+                            ${playerName} 你的分數：${finalScore} 分<br>
+                            (${rankDisplay})
+                        </li>
+                    `;
 
+                    modal.style.display = 'flex';
                 });
             });
         } else {
@@ -1305,8 +1311,8 @@ function initGame() {
       closeBoardBtn.addEventListener('click', () => {
           // 隱藏排行榜
           document.getElementById('leaderboard-modal').style.display = 'none';
-          // 觸發重新開始的邏輯
-          if (startBtn) startBtn.click(); 
+          // 觸發重新開始的邏輯 (改成 actionBtn)
+          if (actionBtn) actionBtn.click(); 
       });
   }
   //********
