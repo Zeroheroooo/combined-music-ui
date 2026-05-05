@@ -1,6 +1,17 @@
 // app.js: 台灣手語學習遊戲 Web 版
 // 使用 ONNX Transformer 模型進行手語辨識
 
+
+const GAME_STATE = {
+  INTRO: "intro",
+  PLAYING: "playing",
+  PAUSE: "pause",
+  GAME_OVER: "game_over"
+};
+
+let currentState = null;
+
+
 // 綁定到 window 上，方便我們在 Console 直接手動呼叫測試
 window.testUpload = saveScoreToCloud;
 window.testGet = getTop10Scores;
@@ -1199,3 +1210,5 @@ function initGame() {
 initModel();
 initWebcam().catch(() => { statusEl.textContent = '狀態: 無法存取攝影機（仍可遊玩）'; });
 initGame();
+
+setState("intro");
