@@ -109,10 +109,8 @@ async function processAudioData(arrayBuffer, sourceURL) {
         bgmPlayer.src = sourceURL;
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         
-        // 🍏 iOS Safari 救星：使用傳統 Callback 包裝成 Promise，避免手機解析崩潰
-        const audioBuffer = await new Promise((resolve, reject) => {
-            audioCtx.decodeAudioData(arrayBuffer, resolve, reject);
-        });
+        // 現代標準解碼寫法
+        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
 
         musicBeats = await analyzeBeatsSmartJS(audioBuffer);
         
