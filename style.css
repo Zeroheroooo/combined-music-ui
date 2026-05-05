@@ -1,0 +1,44 @@
+body {
+  margin: 0;
+  font-family: sans-serif;
+  background: #111;
+  color: white;
+}
+
+.screen {
+  display: none;
+  height: 100vh;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+}
+
+.overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: none;
+  justify-content: center;
+  align-items: center;
+  background: rgba(0,0,0,0.6);
+}
+
+/* 炸彈字體 */
+.bomb {
+  font-family: 'Bangers', cursive;
+  font-size: 48px;
+  color: #ff3d00;
+  -webkit-text-stroke: 2px black;
+}
+
+/* Game Over 動畫 */
+.pop {
+  animation: pop 0.5s ease;
+}
+
+@keyframes pop {
+  from { transform: scale(0); }
+  to { transform: scale(1); }
+}
