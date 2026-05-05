@@ -2,6 +2,8 @@
 <html lang="zh-Hant">
 
 <head>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Bangers&display=swap" rel="stylesheet">
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>台灣手語學習遊戲 - Web 版</title>
@@ -191,5 +193,24 @@
     <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
     <script src="holistic_features.js?v=20260413"></script>
     <script type="module" src="app.js?v=999999"></script>
+
+    <!-- 🎬 開場 -->
+    <div id="introBox" class="screen">
+      <p id="introText"></p>
+      <button onclick="skipIntro()">跳過</button>
+    </div>
+    
+    <!-- ⏸ 暫停 -->
+    <div id="pauseOverlay" class="overlay">
+      <button onclick="resumeGame()">繼續遊戲</button>
+    </div>
+    
+    <!-- 🏁 Game Over UI -->
+    <div id="gameOverUI" class="screen">
+      <h1 id="resultText"></h1>
+      <div id="leaderboard"></div>
+      <button id="restartBtn" onclick="restartGame()">重新開始</button>
+    </div>
+    
 </body>
 </html>
