@@ -1,7 +1,5 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
-
-    
 <head>
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Bangers&display=swap" rel="stylesheet">
@@ -9,133 +7,44 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>台灣手語學習遊戲 - Web 版</title>
     <style>
-        body {
-            margin: 0;
-            overflow: hidden;
-            background: #000;
-            color: #fff;
-            font-family: Arial, sans-serif;
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
+        
+        #canvas { display: block; width: 100vw; height: 100vh; z-index: 0; }
+
+        .center-state {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 32px; padding: 20px 40px; background-color: #0f0; color: #000;
+            border-radius: 12px; border: none; font-weight: bold;
+            box-shadow: 0 0 30px rgba(0, 255, 0, 0.4); z-index: 1000; cursor: pointer;
+            transition: all 0.6s cubic-bezier(0.25, 1, 0.5, 1);
         }
 
-        #canvas {
-            display: block;
-            width: 100vw;
-            height: 100vh;
-            z-index: 0;
+        /* 🌟 R1: 瞬間出現無飄移的暫停按鈕 */
+        .center-state-instant {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 32px; padding: 20px 40px; background-color: #0f0; color: #000;
+            border-radius: 12px; border: none; font-weight: bold;
+            box-shadow: 0 0 30px rgba(0, 255, 0, 0.4); z-index: 1000; cursor: pointer;
+            transition: none; 
         }
-
-        #ui {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            z-index: 10;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            align-items: flex-start;
-            text-align: left;
-            pointer-events: none;
-            font-size: 16px;
-            font-weight: 600;
-            max-width: 500px;
-        }
-
-        #ui-row {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-            flex-wrap: wrap;
-            pointer-events: auto;
-        }
-
-        #ui p {
-            margin: 0;
-            pointer-events: auto;
-        }
-
-        #ui select {
-            pointer-events: auto;
-        }
-
-        .btn {
-            font-size: 16px;
-            padding: 8px 16px;
-            background: #00aa00;
-            color: #fff;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-            pointer-events: auto;
-            transition: background 0.2s;
-        }
-
-        .btn:hover {
-            background: #00dd00;
-        }
-
-        .btn:disabled {
-            background: #666666;
-            cursor: not-allowed;
-            opacity: 0.6;
-        }
-
-        .btn:disabled:hover {
-            background: #666666;
-        }
-
-        .btn-pause {
-            background: #ff6600;
-        }
-
-        .btn-pause:hover {
-            background: #ff9900;
-        }
-
-        #video {
-            position: absolute;
-            right: 10px;
-            top: 10px;
-            width: 320px;
-            height: 180px;
-            border: 2px solid #0f0;
-            z-index: 100;
-            opacity: 1;
-            display: block;
+        
+        .top-left-state {
+            position: absolute; top: 20px; left: 20px; transform: none; 
+            font-size: 18px; padding: 10px 20px; background-color: #ffaa00; color: #000;
+            border-radius: 5px; border: none; font-weight: bold;
+            box-shadow: 0 0 10px rgba(255, 170, 0, 0.5); z-index: 1000; cursor: pointer;
+            transition: all 0.6s cubic-bezier(0.25, 1, 0.5, 1);
         }
     </style>
 </head>
 
 <body>
-    <style>
-        body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
-        
-        .center-state {
-            position: absolute;
-            top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 32px; padding: 20px 40px;
-            background-color: #0f0; color: #000;
-            border-radius: 12px; border: none; font-weight: bold;
-            box-shadow: 0 0 30px rgba(0, 255, 0, 0.4);
-            z-index: 1000; cursor: pointer;
-            transition: all 0.6s cubic-bezier(0.25, 1, 0.5, 1);
-        }
-        
-        .top-left-state {
-            position: absolute;
-            top: 20px; left: 20px;
-            transform: none; 
-            font-size: 18px; padding: 10px 20px;
-            background-color: #ffaa00; color: #000;
-            border-radius: 5px; border: none; font-weight: bold;
-            box-shadow: 0 0 10px rgba(255, 170, 0, 0.5);
-            z-index: 1000; cursor: pointer;
-            transition: all 0.6s cubic-bezier(0.25, 1, 0.5, 1);
-        }
-    </style>
+    <div id="introUI" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 3000; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box;">
+        <div id="typewriterText" style="color: #0f0; font-size: 24px; font-family: monospace; max-width: 600px; line-height: 1.6; min-height: 150px; text-align: left;"></div>
+        <button id="skipIntroBtn" style="margin-top: 40px; padding: 10px 20px; font-size: 16px; background: #333; color: #fff; border: 1px solid #555; border-radius: 5px; cursor: pointer;">略過動畫</button>
+    </div>
 
-    <div id="musicSelectionUI" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 2000; display: flex; justify-content: center; align-items: center; text-align: center;">
+    <div id="musicSelectionUI" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 2000; justify-content: center; align-items: center; text-align: center;">
         <div style="background: #111; padding: 40px; border-radius: 15px; border: 2px solid #0f0; box-shadow: 0 0 30px rgba(0,255,0,0.3); max-width: 400px; width: 90%;">
             <h2 style="color: #fff; margin-bottom: 30px; letter-spacing: 2px;">準備開始遊戲</h2>
             
@@ -178,15 +87,29 @@
     <video id="video" autoplay playsinline muted style="display: none;"></video>
     <audio id="bgmPlayer" crossorigin="anonymous" style="display: none;"></audio>
 
+    <div id="namePromptUI" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 4000; justify-content: center; align-items: center;">
+        <div style="background: #222; padding: 40px; border-radius: 15px; border: 2px solid #0f0; text-align: center; box-shadow: 0 0 20px rgba(0,255,0,0.3);">
+            <h2 id="promptMessage" style="color: #fff; margin-top: 0; margin-bottom: 20px;"></h2>
+            <input type="text" id="playerNameInput" placeholder="請輸入大名" value="神秘玩家" style="padding: 12px; font-size: 18px; width: 80%; margin-bottom: 30px; text-align: center; border-radius: 8px; border: none; outline: none;">
+            <br>
+            <button id="submitNameBtn" style="padding: 12px 30px; font-size: 18px; background: #0f0; color: #000; font-weight: bold; border: none; border-radius: 8px; cursor: pointer;">送出分數</button>
+            <button id="cancelNameBtn" style="padding: 12px 30px; font-size: 18px; background: #555; color: #fff; border: none; border-radius: 8px; cursor: pointer; margin-left: 15px;">不留名並返回</button>
+        </div>
+    </div>
+
+    <div id="customAlertUI" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 5000; justify-content: center; align-items: center;">
+        <div style="background: #222; padding: 30px; border-radius: 10px; border: 2px solid #f00; text-align: center; max-width: 400px;">
+            <h3 id="alertMessage" style="color: #fff; margin-top: 0; line-height: 1.5;"></h3>
+            <button id="closeAlertBtn" style="padding: 10px 30px; font-size: 16px; background: #f00; color: #fff; font-weight: bold; border: none; border-radius: 5px; cursor: pointer; margin-top: 20px;">確定</button>
+        </div>
+    </div>
+
     <div id="leaderboard-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 9999; justify-content: center; align-items: center; flex-direction: column;">
         <div style="background: #111; padding: 30px; border-radius: 15px; border: 3px solid #0f0; width: 85%; max-width: 400px; text-align: center; color: white; box-shadow: 0 0 20px rgba(0,255,0,0.5);">
             <h2 style="color: #0f0; margin-top: 0; font-size: 28px;">🌍 全球排行榜 🌍</h2>
-            
-            <ul id="leaderboard-list" style="list-style: none; padding: 0; margin: 20px 0; max-height: 300px; overflow-y: auto;">
-                </ul>
-            
+            <ul id="leaderboard-list" style="list-style: none; padding: 0; margin: 20px 0; max-height: 300px; overflow-y: auto;"></ul>
             <button id="close-leaderboard-btn" style="padding: 12px 24px; font-size: 18px; cursor: pointer; background: #0f0; color: #000; border: none; border-radius: 8px; font-weight: bold; width: 100%;">
-                關閉並重新開始
+                關閉排行榜
             </button>
         </div>
     </div>
@@ -194,24 +117,5 @@
     <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
     <script src="holistic_features.js?v=20260413"></script>
     <script type="module" src="app.js?v=999999"></script>
-
-    <!-- 🎬 開場 -->
-    <div id="introBox" class="screen">
-      <p id="introText"></p>
-      <button onclick="skipIntro()">跳過</button>
-    </div>
-    
-    <!-- ⏸ 暫停 -->
-    <div id="pauseOverlay" class="overlay">
-      <button onclick="resumeGame()">繼續遊戲</button>
-    </div>
-    
-    <!-- 🏁 Game Over UI -->
-    <div id="gameOverUI" class="screen">
-      <h1 id="resultText"></h1>
-      <div id="leaderboard"></div>
-      <button id="restartBtn" onclick="restartGame()">重新開始</button>
-    </div>
-    
 </body>
 </html>
