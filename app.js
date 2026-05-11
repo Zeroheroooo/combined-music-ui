@@ -421,7 +421,7 @@ function handleGameOver(isWin) {
             promptUI.style.display = 'none';
             showRestartButton(); 
         };
-    }, 2500); 
+    }, 1000); 
 }
 
 function showRestartButton() {
