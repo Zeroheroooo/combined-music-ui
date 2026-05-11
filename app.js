@@ -624,6 +624,8 @@ function initGame() {
         if(parsingStatus) parsingStatus.textContent = '';
         bgmPlayer.pause(); bgmPlayer.src = ''; musicBeats = [];
         statusEl.textContent = '狀態: 準備中 (請選擇音樂)';
+        if (audioUpload) audioUpload.disabled = false;
+        if (defaultMusicBtn) defaultMusicBtn.disabled = false;
         updateHud(); return; 
       }
       
