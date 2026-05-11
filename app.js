@@ -1,12 +1,14 @@
 // app.js: 台灣手語學習遊戲 Web 版
 // 使用 ONNX Transformer 模型進行手語辨識
 
-window.testUpload = saveScoreToCloud;
-window.testGet = getTop10Scores;
-
+// 🚨 修正：所有的 import 必須放在檔案的最上方！
 // ☁️ Firebase 排行榜系統初始化
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
 import { getFirestore, collection, addDoc, getDocs, query, orderBy, limit, serverTimestamp, getCountFromServer, where } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+
+// 綁定到 window 上，方便我們在 Console 直接手動呼叫測試
+window.testUpload = saveScoreToCloud;
+window.testGet = getTop10Scores;
 
 const firebaseConfig = {
   apiKey: "AIzaSyCPcZUYi5Q47iE3UpXaM4Zkw90RtD61-tk",
@@ -400,7 +402,6 @@ function handleGameOver(isWin) {
 
     const finalScore = (hitCount * 100) + (houses.length * 500);
     
-    // 🌟 延遲 2.5 秒，讓玩家先看完畫面上的文字動畫
     setTimeout(() => {
         const message = isWin ? "🎉 恭喜過關！" : "💥 遊戲失敗！";
         const promptUI = document.getElementById('namePromptUI');
@@ -449,7 +450,6 @@ function processAndShowLeaderboard(playerName, finalScore) {
                 let isCurrentPlayer = (player.name === playerName && player.score === finalScore && !playerInserted);
                 let medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `<span style="display:inline-block; width:25px;">${rank}.</span>`;
                 
-                // 🌟 當前玩家整行亮綠色
                 let rowStyle = isCurrentPlayer 
                     ? `display: flex; justify-content: space-between; padding: 10px 5px; border-bottom: 1px dashed #444; font-size: 18px; background: rgba(0,255,0,0.25); font-weight: bold; color: #0f0; border-radius: 5px;` 
                     : `display: flex; justify-content: space-between; padding: 10px 5px; border-bottom: 1px dashed #444; font-size: 18px;`;
@@ -543,7 +543,6 @@ function gameLoop() {
 
   if (gamePaused) {
     ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0, 0, WIDTH, HEIGHT);
-    // 🌟 移除了畫面中間的「暫停」文字
   }
 
   plane.render(ctx); updateHud(); requestAnimationFrame(gameLoop);
@@ -580,9 +579,7 @@ async function predictWebcam() {
   } catch (e) {} requestAnimationFrame(predictWebcam);
 }
 
-// -----------------------
 // 🌟 R3: 打字機動畫邏輯
-// -----------------------
 function startIntroTypewriter() {
     const text = "歡迎進入遊戲！\n\n在炸彈落地前比出上方詞語即可消滅並得 100 分；\n音樂結束時每剩一棟房子得 500 分。\n\n炸彈落地會減少房子，全失則結束。\n看看你能拿多少分！";
     const textEl = document.getElementById('typewriterText');
@@ -638,7 +635,6 @@ function initGame() {
       } 
       else if (gameStarted && !gameOver && !gamePaused) {
         gamePaused = true; bgmPlayer.pause(); updateHud();
-        // 🌟 無飄移動畫
         actionBtn.className = 'center-state-instant'; actionBtn.textContent = '繼續遊戲';
       }
       else if (gameStarted && !gameOver && gamePaused) {
@@ -662,4 +658,4 @@ function initGame() {
 initModel();
 initWebcam().catch(() => { statusEl.textContent = '狀態: 無法存取攝影機（仍可遊玩）'; });
 initGame();
-startIntroTypewriter(); // 啟動打字機
+startIntroTypewriter();
